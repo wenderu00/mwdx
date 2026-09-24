@@ -15,7 +15,7 @@ import {
 } from "@mwdx/db";
 import { rodarClaude } from "./claude.ts";
 import { dirCache, garantirClone } from "./clone.ts";
-import { derrubarContainer, derrubarContainerSync, garantirImagem, limparOrfaos, nomeContainer, subirContainer } from "./container.ts";
+import { derrubarContainer, garantirImagem, limparOrfaos, liberarAtivo, nomeContainer, registrarAtivo, subirContainer } from "./container.ts";
 import { headRemoto, listarRepos, metadadosExtras, normalizarGithub } from "./github.ts";
 import { type Ingestao, ingerirRunDir } from "./ingest.ts";
 import { carimbo, prepararRunDir } from "./run-dir.ts";
@@ -28,7 +28,15 @@ export type ResultadoScan =
 
 const RODANDO_VALIDO_MS = 60 * 60_000;
 
-export async function scan(db: Db, repo: string, opts: { force?: boolean; log?: (m: string) => void } = {}): Promise<ResultadoScan> {
+export type OpcoesScan = {
+  force?: boolean;
+  log?: (m: string) => void;
+  // chamado quando o repo vai de fato ser analisado (depois do skip por HEAD);
+  // devolve o motivo para não analisar, ou null. Usado pelo limite do `scan --all`.
+  reservar?: () => string | null;
+};
+
+export async function scan(db: Db, repo: string, opts: OpcoesScan = {}): Promise<ResultadoScan> {
   const log = opts.log ?? (() => {});
 
   let linha = obterRepo(db, repo);
@@ -54,6 +62,9 @@ export async function scan(db: Db, repo: string, opts: { force?: boolean; log?: 
 
   await limparOrfaos().catch((e) => log(`aviso: limpeza de containers órfãos falhou: ${(e as Error).message}`));
 
+  const recusa = opts.reservar?.();
+  if (recusa) return { repo, pulado: recusa };
+
   log(`clonando/atualizando ${repo}`);
   const head = await garantirClone(repo);
   const stack = detectarStack(dirCache(repo));
@@ -76,27 +87,23 @@ export async function scan(db: Db, repo: string, opts: { force?: boolean; log?: 
   const runDir = prepararRunDir({ codigo: dirCache(repo), contexto, ts });
   iniciarRun(db, { id: runId, repo, head_sha: head, run_dir: runDir });
 
-  const erroContainer = container ? await prepararContainer(container, contexto, runDir, log) : null;
-  const aoInterromper = () => {
-    if (container) derrubarContainerSync(container);
-    process.exit(130);
-  };
-  process.once("SIGINT", aoInterromper);
-  process.once("SIGTERM", aoInterromper);
-
+  if (container) registrarAtivo(container);
   let claude: Awaited<ReturnType<typeof rodarClaude>>;
   try {
+    const erroContainer = container ? await prepararContainer(container, contexto, runDir, log) : null;
     log(`analisando ${repo} (${runDir})`);
     claude = await rodarClaude(`/mwdx:analisar-repo ${repo} ${runDir}`, runDir);
+    if (erroContainer) claude = { ...claude, erro: [erroContainer, claude.erro].filter(Boolean).join("\n") };
   } finally {
-    process.off("SIGINT", aoInterromper);
-    process.off("SIGTERM", aoInterromper);
-    if (contexto.container) await derrubarContainer(contexto.container);
+    if (container) {
+      await derrubarContainer(container);
+      liberarAtivo(container);
+    }
   }
   writeFileSync(path.join(runDir, "claude-resultado.json"), JSON.stringify(claude, null, 2) + "\n");
 
   let ingestao: Ingestao | null = null;
-  let erro = [erroContainer, claude.erro].filter(Boolean).join("\n") || null;
+  let erro = claude.erro;
   try {
     ingestao = ingerirRunDir(db, runDir, runId);
     if (ingestao.problemas.length) erro = [erro, ...ingestao.problemas].filter(Boolean).join("\n");

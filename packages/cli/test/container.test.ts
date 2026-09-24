@@ -12,7 +12,7 @@ describe("orfaos", () => {
   const agora = 10 * 60 * 60_000;
   it("devolve só containers mwdx- com label mais velho que o limite", () => {
     const saida = [
-      `mwdx-velho-t1 ${agora - 2 * 60 * 60_000}`,
+      `mwdx-velho-t1 ${agora - 3 * 60 * 60_000}`,
       `mwdx-novo-t2 ${agora - 5 * 60_000}`,
       "mwdx-sem-label ",
       `outro ${agora - 5 * 60 * 60_000}`,

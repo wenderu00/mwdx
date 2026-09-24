@@ -2,102 +2,166 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "reconciliacao": {
+    "gerado_em": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repos": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "id": {
+          "repo": {
             "type": "string",
             "minLength": 1
           },
-          "veredito": {
-            "type": "string",
-            "enum": [
-              "persistente",
-              "resolvido"
+          "github": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "stack": {
+            "type": [
+              "string",
+              "null"
             ]
           },
-          "evidencias": {
-            "minItems": 1,
+          "analisado_em": {
+            "description": "null = nunca analisado (só metadados do GitHub)",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notas": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "enum": [
+                "higiene",
+                "arquitetura",
+                "portfolio"
+              ]
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            }
+          },
+          "achados_ativos": {
             "type": "array",
             "items": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "arquivo": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "Caminho relativo à raiz do repo (ausência também vale: ex. '.github/')"
-                    },
-                    "linha": {
-                      "type": "integer",
-                      "exclusiveMinimum": 0,
-                      "maximum": 9007199254740991
-                    },
-                    "obs": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  },
-                  "required": [
-                    "arquivo",
-                    "obs"
-                  ],
-                  "additionalProperties": false
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
                 },
-                {
-                  "type": "object",
-                  "properties": {
-                    "execucao": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "Comando exatamente como aparece em execucao.json"
-                    },
-                    "obs": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  },
-                  "required": [
-                    "execucao",
-                    "obs"
-                  ],
-                  "additionalProperties": false
+                "dimensao": {
+                  "type": "string",
+                  "enum": [
+                    "higiene",
+                    "arquitetura",
+                    "portfolio"
+                  ]
                 },
-                {
-                  "type": "object",
-                  "properties": {
-                    "github": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "Campo de contexto.json → github (ex. 'pushed_at', 'issues_abertas')"
-                    },
-                    "obs": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  },
-                  "required": [
-                    "github",
-                    "obs"
-                  ],
-                  "additionalProperties": false
+                "tipo": {
+                  "type": "string",
+                  "enum": [
+                    "lacuna",
+                    "oportunidade"
+                  ]
+                },
+                "titulo": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "impacto": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "esforco": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "aberto",
+                    "em_andamento",
+                    "adiado",
+                    "ignorado",
+                    "resolvido",
+                    "regrediu"
+                  ]
                 }
-              ]
+              },
+              "required": [
+                "id",
+                "dimensao",
+                "tipo",
+                "titulo",
+                "impacto",
+                "esforco",
+                "status"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "ignorados": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "dimensao": {
+                  "type": "string",
+                  "enum": [
+                    "higiene",
+                    "arquitetura",
+                    "portfolio"
+                  ]
+                },
+                "titulo": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "motivo": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "dimensao",
+                "titulo",
+                "motivo"
+              ],
+              "additionalProperties": false
             }
           }
         },
         "required": [
-          "id",
-          "veredito",
-          "evidencias"
+          "repo",
+          "github",
+          "stack",
+          "analisado_em",
+          "notas",
+          "achados_ativos",
+          "ignorados"
         ],
         "additionalProperties": false
       }
     },
-    "achados_novos": {
+    "achados_transversais_ativos": {
       "type": "array",
       "items": {
         "type": "object",
@@ -208,6 +272,21 @@
               "type": "string",
               "minLength": 1
             }
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "aberto",
+              "em_andamento",
+              "adiado",
+              "ignorado",
+              "resolvido",
+              "regrediu"
+            ]
           }
         },
         "required": [
@@ -217,18 +296,23 @@
           "impacto",
           "esforco",
           "acao",
-          "repos"
+          "repos",
+          "id",
+          "status"
         ],
         "additionalProperties": false
       }
     },
-    "fixar_no_perfil": {
-      "maxItems": 6,
+    "transversais_ignorados": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "repo": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "titulo": {
             "type": "string",
             "minLength": 1
           },
@@ -238,28 +322,8 @@
           }
         },
         "required": [
-          "repo",
-          "motivo"
-        ],
-        "additionalProperties": false
-      }
-    },
-    "arquivar": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "repo": {
-            "type": "string",
-            "minLength": 1
-          },
-          "motivo": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": [
-          "repo",
+          "id",
+          "titulo",
           "motivo"
         ],
         "additionalProperties": false
@@ -267,10 +331,10 @@
     }
   },
   "required": [
-    "reconciliacao",
-    "achados_novos",
-    "fixar_no_perfil",
-    "arquivar"
+    "gerado_em",
+    "repos",
+    "achados_transversais_ativos",
+    "transversais_ignorados"
   ],
   "additionalProperties": false
 }

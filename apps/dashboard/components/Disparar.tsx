@@ -1,13 +1,13 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { reanalisarAcao } from "../lib/acoes.ts";
+import type { Resultado } from "../lib/acoes.ts";
 
-// O run "rodando" só aparece no banco depois do clone, então após o clique a
-// página continua atualizando por um tempo mesmo sem ver o run ainda.
+// O run "rodando" só aparece no banco depois do clone (ou da montagem do resumo),
+// então após o clique a página continua atualizando por um tempo mesmo sem vê-lo.
 const ESPERA_RUN_MS = 90_000;
 
-export function Reanalisar({ repo, rodando }: { repo: string; rodando: boolean }) {
+export function Disparar({ acao, rodando, rotulo }: { acao: () => Promise<Resultado>; rodando: boolean; rotulo: string }) {
   const router = useRouter();
   const [disparadoEm, setDisparadoEm] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -27,13 +27,13 @@ export function Reanalisar({ repo, rodando }: { repo: string; rodando: boolean }
         disabled={pendente || aguardando}
         onClick={() =>
           iniciar(async () => {
-            const r = await reanalisarAcao(repo);
+            const r = await acao();
             setErro(r.erro);
             if (!r.erro) setDisparadoEm(Date.now());
           })
         }
       >
-        {aguardando ? "analisando…" : "reanalisar"}
+        {aguardando ? "rodando…" : rotulo}
       </button>
       {erro && <span className="erro">{erro}</span>}
     </span>

@@ -1,6 +1,6 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lte, ne } from "drizzle-orm";
 import type { Dimensao, Evidencia, Execucao, StatusAchado } from "@mwdx/schema";
-import { type Db, STATUS_ATIVOS } from "./index.ts";
+import { type Db, REPO_TRANSVERSAL, STATUS_ATIVOS } from "./index.ts";
 import * as t from "./tabelas.ts";
 
 // Leituras do dashboard. O volume é pequeno (dezenas de repos, centenas de runs),
@@ -82,7 +82,7 @@ export type RunDetalhe = Omit<LinhaRun, "execucao_json"> & { execucao: Execucao 
 
 export type AchadoDetalhe = {
   id: string;
-  dimensao: Dimensao;
+  dimensao: Dimensao | "transversal";
   tipo: "lacuna" | "oportunidade";
   titulo: string;
   evidencias: Evidencia[];
@@ -92,6 +92,7 @@ export type AchadoDetalhe = {
   status: StatusAchado;
   criado_run: string;
   atualizado_run: string;
+  repos: string[] | null; // só transversais
   // último evento: quem mudou para o status atual e por quê
   ultimoEvento: { origem: "agente" | "usuario"; motivo: string | null; em: string } | null;
 };
@@ -114,7 +115,13 @@ export function detalheRepo(db: Db, nome: string): DetalheRepo | null {
     notas: notas.get(r.id) ?? {},
   }));
 
-  const achados = db.select().from(t.achados).where(eq(t.achados.repo, nome)).all();
+  return { repo, runs, achados: detalharAchados(db, db.select().from(t.achados).where(eq(t.achados.repo, nome)).all()) };
+}
+
+const ordemStatus = (s: string) => ((STATUS_ATIVOS as readonly string[]).includes(s) ? 0 : 1);
+
+// Ativos primeiro; entre eles, maior impacto e menor esforço.
+function detalharAchados(db: Db, achados: (typeof t.achados.$inferSelect)[]): AchadoDetalhe[] {
   const eventos = new Map<string, AchadoDetalhe["ultimoEvento"]>();
   if (achados.length) {
     const lista = db
@@ -125,27 +132,86 @@ export function detalheRepo(db: Db, nome: string): DetalheRepo | null {
       .all();
     for (const e of lista) eventos.set(e.achado_id, { origem: e.origem, motivo: e.motivo, em: e.em });
   }
+  return achados
+    .map((a) => ({
+      id: a.id,
+      dimensao: a.dimensao as AchadoDetalhe["dimensao"],
+      tipo: a.tipo,
+      titulo: a.titulo,
+      evidencias: a.evidencias_json as Evidencia[],
+      impacto: a.impacto,
+      esforco: a.esforco,
+      acao: a.acao,
+      status: a.status as StatusAchado,
+      criado_run: a.criado_run,
+      atualizado_run: a.atualizado_run,
+      repos: (a.repos_json as string[] | null) ?? null,
+      ultimoEvento: eventos.get(a.id) ?? null,
+    }))
+    .sort((a, b) => ordemStatus(a.status) - ordemStatus(b.status) || b.impacto - a.impacto || a.esforco - b.esforco || a.id.localeCompare(b.id));
+}
 
-  const ordemStatus = (s: string) => (STATUS_ATIVOS as readonly string[]).includes(s) ? 0 : 1;
+function ultimaExecucao(db: Db, repo: string): Execucao | null {
+  const r = db
+    .select({ execucao: t.runs.execucao_json })
+    .from(t.runs)
+    .where(and(eq(t.runs.repo, repo), inArray(t.runs.status, ["ok", "parcial"])))
+    .orderBy(desc(t.runs.iniciado))
+    .all()
+    .find((x) => x.execucao);
+  return (r?.execucao as Execucao | undefined) ?? null;
+}
+
+export type QuickWin = { repo: string; achado: AchadoDetalhe; execucao: Execucao | null };
+
+// Achados ativos de impacto alto e esforço baixo em todos os repos. `amplo`
+// inclui também impacto alto × esforço médio e impacto médio × esforço baixo.
+export function quickWins(db: Db, opts: { amplo?: boolean } = {}): QuickWin[] {
+  const linhas = db
+    .select()
+    .from(t.achados)
+    .where(
+      and(
+        ne(t.achados.repo, REPO_TRANSVERSAL),
+        inArray(t.achados.status, STATUS_ATIVOS),
+        opts.amplo ? and(gt(t.achados.impacto, t.achados.esforco), lte(t.achados.esforco, 2)) : and(eq(t.achados.impacto, 3), eq(t.achados.esforco, 1)),
+      ),
+    )
+    .all();
+  const repoDe = new Map(linhas.map((a) => [a.id, a.repo]));
+  const execucoes = new Map<string, Execucao | null>();
+  return detalharAchados(db, linhas).map((achado) => {
+    const repo = repoDe.get(achado.id)!;
+    if (!execucoes.has(repo)) execucoes.set(repo, ultimaExecucao(db, repo));
+    return { repo, achado, execucao: execucoes.get(repo)! };
+  });
+}
+
+export type Recomendacao = { repo: string; motivo: string; privado: boolean | null; arquivado: boolean | null };
+
+export type Portfolio = {
+  ultimoRun: Pick<typeof t.runs.$inferSelect, "id" | "status" | "iniciado" | "custo_usd" | "erro"> | null;
+  rodando: boolean;
+  fixar: Recomendacao[];
+  arquivar: Recomendacao[];
+  achados: AchadoDetalhe[];
+};
+
+export function portfolio(db: Db): Portfolio {
+  const runs = db.select().from(t.runs).where(eq(t.runs.repo, REPO_TRANSVERSAL)).orderBy(desc(t.runs.iniciado)).all();
+  const ultimoOk = runs.find((r) => r.status === "ok");
+  const repos = new Map(db.select().from(t.repos).all().map((r) => [r.nome, r]));
+  const recs = ultimoOk ? db.select().from(t.recomendacoes).where(eq(t.recomendacoes.run_id, ultimoOk.id)).all() : [];
+  const rec = (tipo: "fixar" | "arquivar") =>
+    recs
+      .filter((r) => r.tipo === tipo)
+      .map((r) => ({ repo: r.repo, motivo: r.motivo, privado: repos.get(r.repo)?.privado ?? null, arquivado: repos.get(r.repo)?.arquivado ?? null }));
+  const ultimo = runs[0];
   return {
-    repo,
-    runs,
-    achados: achados
-      .map((a) => ({
-        id: a.id,
-        dimensao: a.dimensao as Dimensao,
-        tipo: a.tipo,
-        titulo: a.titulo,
-        evidencias: a.evidencias_json as Evidencia[],
-        impacto: a.impacto,
-        esforco: a.esforco,
-        acao: a.acao,
-        status: a.status as StatusAchado,
-        criado_run: a.criado_run,
-        atualizado_run: a.atualizado_run,
-        ultimoEvento: eventos.get(a.id) ?? null,
-      }))
-      // ativos primeiro; entre eles, maior impacto e menor esforço
-      .sort((a, b) => ordemStatus(a.status) - ordemStatus(b.status) || b.impacto - a.impacto || a.esforco - b.esforco || a.id.localeCompare(b.id)),
+    ultimoRun: ultimo ? { id: ultimo.id, status: ultimo.status, iniciado: ultimo.iniciado, custo_usd: ultimo.custo_usd, erro: ultimo.erro } : null,
+    rodando: runs.some((r) => r.status === "rodando"),
+    fixar: rec("fixar"),
+    arquivar: rec("arquivar"),
+    achados: detalharAchados(db, db.select().from(t.achados).where(eq(t.achados.repo, REPO_TRANSVERSAL)).all()),
   };
 }

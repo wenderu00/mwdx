@@ -1,6 +1,6 @@
 import { chmodSync, cpSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { Contexto } from "@mwdx/schema";
+import { Contexto, Resumo } from "@mwdx/schema";
 import { PLUGIN, mwdxHome } from "./caminhos.ts";
 
 // Pastas pesadas e regeneráveis que não vale copiar para work/.
@@ -21,13 +21,28 @@ export function prepararRunDir(opts: { codigo: string; contexto: Contexto; ts?: 
     recursive: true,
     filter: (origem) => !IGNORAR.has(path.basename(origem)),
   });
-  cpSync(path.join(PLUGIN, "schemas"), path.join(dir, "schemas"), { recursive: true });
-  cpSync(path.join(PLUGIN, "perfil.md"), path.join(dir, "perfil.md"));
-  cpSync(path.join(PLUGIN, "regras-achados.md"), path.join(dir, "regras-achados.md"));
+  copiarReferencias(dir);
   const exec = path.join(dir, "bin", "exec-container.sh");
   cpSync(path.join(PLUGIN, "scripts", "exec-container.sh"), exec);
   chmodSync(exec, 0o755);
 
   writeFileSync(path.join(dir, "contexto.json"), JSON.stringify(contexto, null, 2) + "\n");
+  return dir;
+}
+
+function copiarReferencias(dir: string) {
+  cpSync(path.join(PLUGIN, "schemas"), path.join(dir, "schemas"), { recursive: true });
+  cpSync(path.join(PLUGIN, "perfil.md"), path.join(dir, "perfil.md"));
+  cpSync(path.join(PLUGIN, "regras-achados.md"), path.join(dir, "regras-achados.md"));
+}
+
+// Run dir da visão transversal: runs/_transversal/<ts>/ com resumo.json no lugar
+// de contexto.json e work/ (o estrategista não lê código).
+export function prepararRunDirTransversal(opts: { resumo: Resumo; repo: string; ts?: string }): string {
+  const resumo = Resumo.parse(opts.resumo);
+  const dir = path.join(mwdxHome(), "runs", opts.repo, opts.ts ?? carimbo());
+  mkdirSync(dir, { recursive: true });
+  copiarReferencias(dir);
+  writeFileSync(path.join(dir, "resumo.json"), JSON.stringify(resumo, null, 2) + "\n");
   return dir;
 }

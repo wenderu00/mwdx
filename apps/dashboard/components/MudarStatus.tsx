@@ -4,12 +4,11 @@ import { mudarStatusAcao } from "../lib/acoes.ts";
 
 const OPCOES = ["aberto", "em_andamento", "adiado", "ignorado", "resolvido"];
 
-export function MudarStatus({ repo, id, status }: { repo: string; id: string; status: string }) {
+export function MudarStatus({ id, status }: { id: string; status: string }) {
   const [escolhido, setEscolhido] = useState(status);
   const [estado, acao, enviando] = useActionState(mudarStatusAcao, { erro: null });
   return (
     <form action={acao} className="acoes">
-      <input type="hidden" name="repo" value={repo} />
       <input type="hidden" name="id" value={id} />
       <select name="status" value={escolhido} onChange={(e) => setEscolhido(e.target.value)}>
         {/* "regrediu" só o agente atribui, mas precisa aparecer quando é o status atual */}

@@ -15,6 +15,7 @@ const achado = (evidencias: AchadoDetalhe["evidencias"]): AchadoDetalhe => ({
   status: "aberto",
   criado_run: "demo/1",
   atualizado_run: "demo/1",
+  repos: null,
   ultimoEvento: null,
 });
 const cmd = (etapa: Execucao["comandos"][number]["etapa"], comando: string) => ({ etapa, comando, exit_code: 0, duracao_s: 1, resumo: "r" });
@@ -55,5 +56,10 @@ describe("promptCorrecao", () => {
     const p = promptCorrecao("demo", achado([{ arquivo: "README.md", obs: "ausente" }]), execucao);
     expect(p).toMatch(/verifique com:\n- `cd app && npm run build`\n- `dotnet test X.sln`$/);
     expect(promptCorrecao("demo", achado([{ arquivo: "README.md", obs: "ausente" }]), null)).toMatch(/confira as evidências/);
+  });
+
+  it("achado transversal cita os repos envolvidos", () => {
+    const p = promptCorrecao("_transversal", { ...achado([{ github: "a.ci", obs: "sem CI" }]), id: "transversal-1", repos: ["a", "b"] }, null);
+    expect(p.split("\n")[0]).toBe("Nos repositórios a, b, resolva o achado transversal transversal-1 (lacuna): Dependências com vulnerabilidade crítica");
   });
 });

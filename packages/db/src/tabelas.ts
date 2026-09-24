@@ -47,9 +47,9 @@ export const notas = sqliteTable(
 export const achados = sqliteTable(
   "achados",
   {
-    id: text().primaryKey(), // "<repo>-<dimensao>-<n>"
-    repo: text().notNull(),
-    dimensao: text().notNull(),
+    id: text().primaryKey(), // "<repo>-<dimensao>-<n>"; transversais: "transversal-<n>"
+    repo: text().notNull(), // transversais: "_transversal"
+    dimensao: text().notNull(), // higiene | arquitetura | portfolio | transversal
     tipo: text({ enum: ["lacuna", "oportunidade"] }).notNull(),
     titulo: text().notNull(),
     evidencias_json: text({ mode: "json" }).notNull(),
@@ -59,6 +59,7 @@ export const achados = sqliteTable(
     status: text().notNull(),
     criado_run: text().notNull(),
     atualizado_run: text().notNull(),
+    repos_json: text({ mode: "json" }), // só transversais: repos envolvidos
   },
   (t) => [index("achados_repo").on(t.repo, t.dimensao, t.status)],
 );
@@ -76,4 +77,17 @@ export const achadoEventos = sqliteTable(
     em: text().notNull(),
   },
   (t) => [index("eventos_achado").on(t.achado_id)],
+);
+
+// Recomendações de cada run transversal (fixar no perfil / arquivar). Não são
+// achados: valem só como foto do último run.
+export const recomendacoes = sqliteTable(
+  "recomendacoes",
+  {
+    run_id: text().notNull(),
+    tipo: text({ enum: ["fixar", "arquivar"] }).notNull(),
+    repo: text().notNull(),
+    motivo: text().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.run_id, t.tipo, t.repo] })],
 );

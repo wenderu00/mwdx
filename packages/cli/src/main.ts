@@ -1,16 +1,22 @@
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { StatusAchado } from "@mwdx/schema";
-import { abrirDb, iniciarRun, mudarStatus, obterRun, sincronizarRepos, finalizarRun } from "@mwdx/db";
+import { existsSync } from "node:fs";
+import { REPO_TRANSVERSAL, abrirDb, iniciarRun, mudarStatus, obterRun, sincronizarRepos, finalizarRun } from "@mwdx/db";
 import { mwdxHome } from "./caminhos.ts";
 import { listarRepos } from "./github.ts";
-import { ingerirRunDir } from "./ingest.ts";
+import { estrategia } from "./estrategia.ts";
+import { ingerirRunDir, ingerirTransversal } from "./ingest.ts";
+import { filaLote, scanLote } from "./lote.ts";
 import { prepararRunDir } from "./run-dir.ts";
 import { scan } from "./scan.ts";
 
 const USO = `uso:
   mwdx repos sync                          atualiza a lista de repos a partir do GitHub
   mwdx scan <repo> [--force]               analisa um repo (pula se o HEAD não mudou)
+  mwdx scan --all [--concorrencia 2] [--limite n] [--listar]
+                                           analisa todos os repos ativos, dos mais recentes aos mais antigos
+  mwdx estrategia                          visão transversal (padrões, fixar no perfil, arquivar)
   mwdx ingest <run_dir>                    (re)aplica no banco os relatórios de um run dir
   mwdx achado <id> <status> [--motivo m]   muda o status de um achado (ignorado exige motivo)
   mwdx preparar <repo> <caminho>           monta um run dir sem GitHub nem container (dev)`;
@@ -32,15 +38,30 @@ async function executar() {
       return;
     }
     case "scan": {
-      const { positionals, values } = parseArgs({ args: resto, allowPositionals: true, options: { force: { type: "boolean" } } });
+      const { positionals, values } = parseArgs({
+        args: resto,
+        allowPositionals: true,
+        options: {
+          force: { type: "boolean" },
+          all: { type: "boolean" },
+          concorrencia: { type: "string" },
+          limite: { type: "string" },
+          listar: { type: "boolean" },
+        },
+      });
+      if (values.all) return scanTodos(values);
       if (!positionals[0]) sair(USO);
-      const r = await scan(abrirDb(), positionals[0], { force: values.force, log: (m) => console.error(`· ${m}`) });
-      if ("pulado" in r) {
-        console.log(`${r.repo}: pulado — ${r.pulado}`);
-        return;
+      imprimirScan(await scan(abrirDb(), positionals[0], { force: values.force, log: (m) => console.error(`· ${m}`) }));
+      return;
+    }
+    case "estrategia": {
+      const r = await estrategia(abrirDb(), { log: (m) => console.error(`· ${m}`) });
+      console.log(`transversal: ${r.status} — run ${r.runId}`);
+      if (r.ingestao) {
+        const i = r.ingestao;
+        console.log(`  ${i.novos.length} achados novos, ${i.reconciliados} reconciliados (${i.mudancas} mudaram de status)`);
+        console.log(`  ${i.fixar} para fixar no perfil, ${i.arquivar} para arquivar`);
       }
-      console.log(`${r.repo}: ${r.status} — run ${r.runId}`);
-      if (r.ingestao) console.log(`  ${r.ingestao.novos.length} achados novos, ${r.ingestao.reconciliados} reconciliados (${r.ingestao.mudancas} mudaram de status)`);
       if (r.custo_usd != null) console.log(`  custo equivalente: US$ ${r.custo_usd.toFixed(2)}`);
       if (r.erro) console.log(`  problemas:\n${indentar(r.erro)}`);
       if (r.status === "erro") process.exitCode = 1;
@@ -50,6 +71,13 @@ async function executar() {
       const runDir = path.resolve(resto[0] ?? sair(USO));
       const runId = path.relative(path.join(mwdxHome(), "runs"), runDir);
       const db = abrirDb();
+      if (existsSync(path.join(runDir, "resumo.json"))) {
+        if (!obterRun(db, runId)) iniciarRun(db, { id: runId, repo: REPO_TRANSVERSAL, head_sha: null, run_dir: runDir });
+        const r = ingerirTransversal(db, runDir, runId);
+        finalizarRun(db, runId, { status: "ok" });
+        console.log(`${runId}: ok — ${r.novos.length} novos, ${r.reconciliados} reconciliados, ${r.fixar} fixar, ${r.arquivar} arquivar`);
+        return;
+      }
       // run dirs montados com `mwdx preparar` não têm linha em runs
       if (!obterRun(db, runId)) iniciarRun(db, { id: runId, repo: runId.split("/")[0]!, head_sha: null, run_dir: runDir });
       const r = ingerirRunDir(db, runDir, runId);
@@ -89,6 +117,49 @@ async function executar() {
     default:
       sair(USO);
   }
+}
+
+async function scanTodos(values: { concorrencia?: string; limite?: string; listar?: boolean }) {
+  const db = abrirDb();
+  if (values.listar) {
+    sincronizarRepos(db, await listarRepos());
+    const fila = filaLote(db);
+    fila.forEach((r, i) => console.log(`${String(i + 1).padStart(3)}. ${r}`));
+    console.log(`${fila.length} repos na fila (sem vazios, arquivados e forks); os já analisados no HEAD atual são pulados`);
+    return;
+  }
+  const inteiro = (v: string | undefined, nome: string) => {
+    if (v == null) return undefined;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 1) sair(`--${nome} precisa ser um inteiro positivo`);
+    return n;
+  };
+  const r = await scanLote(db, {
+    concorrencia: inteiro(values.concorrencia, "concorrencia"),
+    limite: inteiro(values.limite, "limite"),
+    log: (m) => console.error(`· ${m}`),
+  });
+  const conta = (f: (x: (typeof r.resultados)[number]) => boolean) => r.resultados.filter(f).length;
+  console.log(
+    `lote: ${conta((x) => !("pulado" in x))} analisados, ${conta((x) => "pulado" in x)} pulados, ` +
+      `${conta((x) => "status" in x && x.status === "erro")} com erro · custo equivalente US$ ${r.custo_usd.toFixed(2)}`,
+  );
+  if (r.interrompido) {
+    console.log(`  interrompido: ${r.interrompido}. Rode de novo para continuar de onde parou.`);
+    process.exitCode = 1;
+  }
+}
+
+function imprimirScan(r: Awaited<ReturnType<typeof scan>>) {
+  if ("pulado" in r) {
+    console.log(`${r.repo}: pulado — ${r.pulado}`);
+    return;
+  }
+  console.log(`${r.repo}: ${r.status} — run ${r.runId}`);
+  if (r.ingestao) console.log(`  ${r.ingestao.novos.length} achados novos, ${r.ingestao.reconciliados} reconciliados (${r.ingestao.mudancas} mudaram de status)`);
+  if (r.custo_usd != null) console.log(`  custo equivalente: US$ ${r.custo_usd.toFixed(2)}`);
+  if (r.erro) console.log(`  problemas:\n${indentar(r.erro)}`);
+  if (r.status === "erro") process.exitCode = 1;
 }
 
 function indentar(texto: string): string {

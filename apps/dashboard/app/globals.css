@@ -35,6 +35,8 @@ body {
 }
 a { color: var(--destaque); text-decoration: none; }
 a:hover { text-decoration: underline; }
+.nav { display: flex; gap: 18px; align-items: baseline; max-width: 1200px; margin: 0 auto; padding: 14px 16px 0; flex-wrap: wrap; }
+.nav .marca { font-weight: 700; color: var(--texto); margin-right: 8px; }
 main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; }
 header.topo { display: flex; align-items: baseline; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
 header.topo h1 { font-size: 20px; margin: 0; }

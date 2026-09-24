@@ -1,6 +1,6 @@
 # Próximos passos
 
-Estado em 2026-09-24: fatias 1 a 4 concluídas e verificadas ponta a ponta
+Estado em 2026-09-24: fatias 1 a 5 concluídas e verificadas ponta a ponta
 (bioquest via `claude -p` direto; tilapia via `mwdx scan`, com reanálise
 `--force` confirmando a reconciliação; tilapia e GamingShoppingApp com container). Plano original:
 `~/.claude/plans/eu-quero-fazer-uma-synchronous-karp.md`.
@@ -10,7 +10,7 @@ Estado em 2026-09-24: fatias 1 a 4 concluídas e verificadas ponta a ponta
 ```bash
 cd ~/projects/mwdx
 corepack pnpm install
-corepack pnpm -r test && corepack pnpm -r typecheck   # 32 testes
+corepack pnpm -r test && corepack pnpm -r typecheck   # 44 testes
 ```
 
 `~/.mwdx` ainda está vazio. Os testes reais rodaram num `MWDX_HOME` de rascunho.
@@ -58,20 +58,40 @@ troca de status pelo form (inclusive o erro de ignorar sem motivo) e o spawn da
 CLI (com repo inexistente, para não gastar análise). Falta ver a reanálise real
 terminando e o sparkline com mais de um run.
 
-## Fatia 5: lote e visão transversal
+## Fatia 5: lote e visão transversal (concluída)
 
-- `mwdx scan --all`: fila com concorrência 2, retomável (pula o que já tem run
-  `ok` no HEAD atual, que já é o comportamento do skip) e ordenada por
-  `pushed_at` desc (os ativos primeiro). Pular repos vazios e arquivados.
-  Mostrar o custo acumulado.
-- `mwdx estrategia`: exportar `resumo.json` do banco (um item por repo: github,
-  stack, notas, achados ativos e ignorados) num run dir
-  `runs/_transversal/<ts>/` com `perfil.md`, `regras-achados.md` e `schemas/`.
-  Rodar `claude -p "/mwdx:estrategia <run_dir>"` e ingerir `transversal.json`.
-  - Falta no banco: achados transversais com vários repos. Opção: `repo = "_transversal"`
-    mais uma coluna `repos_json`, e tabelas para `fixar_no_perfil`/`arquivar` por run.
-- Dashboard: `/quick-wins` (impacto alto × esforço baixo, todos os repos) e
-  `/portfolio` (transversal, fixar/arquivar).
+- `mwdx scan --all [--concorrencia 2] [--limite n] [--listar]` (`packages/cli/src/lote.ts`):
+  fila de repos não vazios, não arquivados e que não são fork, por `pushed_at`
+  desc (57 hoje). É retomável porque `scan` pula quem já foi analisado no HEAD
+  atual. `--limite` conta só análises feitas (a vaga é reservada dentro do
+  `scan`, depois do skip). A fila para sozinha quando o claude responde que bateu
+  no limite da assinatura. Um único handler de SIGINT derruba todos os containers
+  vivos; órfãos agora são os com mais de 2h.
+- `mwdx estrategia` (`packages/cli/src/estrategia.ts`): `resumoTransversal` monta
+  `resumo.json` (todos os repos, notas, achados ativos/ignorados e os achados
+  transversais ativos), roda `/mwdx:estrategia` e ingere `transversal.json`.
+  - Achados transversais ficam em `achados` com `repo = "_transversal"`,
+    `dimensao = "transversal"`, id `transversal-<n>` e `repos_json`; o estrategista
+    reconcilia cada ativo (`persistente`/`resolvido`), igual aos especialistas.
+  - Fixar/arquivar vão para `recomendacoes` (foto de cada run; o dashboard mostra a do último run ok).
+  - O hook valida `transversal.json` contra `resumo.json` (repos existentes,
+    reconciliação completa, repo não pode estar em fixar e arquivar).
+- Dashboard: `/quick-wins` (impacto alto × esforço baixo; "ampliar" inclui 3×2 e 2×1)
+  e `/portfolio` (fixar/arquivar, achados transversais com status e prompt,
+  botão "gerar visão transversal").
+
+Verificado com um `claude` falso (`MWDX_CLAUDE_BIN`): estrategia duas vezes no banco
+de rascunho (a segunda reconciliou o achado da primeira), hook rejeitando repo
+inexistente, disparo e troca de status pelo dashboard, e `scan --all --listar`
+com o GitHub real. **Não verificado com o claude real**: o estrategista seguindo o
+novo formato (reconciliação) e um lote real.
+
+## Primeiro uso real
+
+1. `node packages/cli/bin/mwdx.js repos sync` (o `~/.mwdx` real ainda está vazio).
+2. `scan --all --limite 5` para medir custo e qualidade nos repos mais ativos; depois o resto
+   (57 repos × US$ 2–4 ≈ US$ 170 equivalentes).
+3. `mwdx estrategia` e revisar `/portfolio`.
 
 ## Pendências e observações
 

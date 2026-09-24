@@ -23,7 +23,9 @@ function verificacao(achado: AchadoDetalhe, execucao: Execucao | null): string[]
 export function promptCorrecao(repo: string, achado: AchadoDetalhe, execucao: Execucao | null): string {
   const cmds = verificacao(achado, execucao);
   return [
-    `No repositório ${repo}, resolva o achado ${achado.id} (${achado.dimensao}, ${achado.tipo}): ${achado.titulo}`,
+    achado.repos?.length
+      ? `Nos repositórios ${achado.repos.join(", ")}, resolva o achado transversal ${achado.id} (${achado.tipo}): ${achado.titulo}`
+      : `No repositório ${repo}, resolva o achado ${achado.id} (${achado.dimensao}, ${achado.tipo}): ${achado.titulo}`,
     "",
     "O que fazer:",
     achado.acao,

@@ -9,9 +9,21 @@ código: trabalha só sobre os relatórios já produzidos.
 
 ## Entrada
 
-`run_dir`, contendo `resumo.json` (um item por repo: metadados do GitHub, stack,
-notas por dimensão, achados ativos e achados ignorados), `perfil.md`,
-`regras-achados.md` e `schemas/transversal.schema.json`.
+`run_dir`, contendo `resumo.json`, `perfil.md`, `regras-achados.md` e
+`schemas/transversal.schema.json`. O `resumo.json` traz:
+
+- `repos`: um item por repo (inclusive os nunca analisados, com `analisado_em:
+  null`): metadados do GitHub, stack, notas por dimensão, achados ativos e
+  ignorados com motivo;
+- `achados_transversais_ativos`: achados transversais de execuções anteriores;
+- `transversais_ignorados`: achados transversais que o dono descartou, com motivo.
+
+## Reconciliação
+
+Todo item de `achados_transversais_ativos` precisa de um item em `reconciliacao`:
+`persistente` se o padrão continua (com evidência atual) ou `resolvido` se sumiu
+(ex.: os repos citados ganharam CI). Não recrie como achado novo o que já existe
+ali, e não sugira de novo nada parecido com `transversais_ignorados`.
 
 ## O que produzir
 
@@ -26,17 +38,18 @@ notas por dimensão, achados ativos e achados ignorados), `perfil.md`,
      mesmo sistema) — consolidar ou contar a evolução num README;
    - stacks ou versões inconsistentes sem motivo.
    Evidências: use `{"github": "<repo>.<campo>", "obs": ...}` ou cite o id de um
-   achado de um repo em `obs`. As regras de `regras-achados.md` valem (sem
+   achado de um repo em `obs`. Todo repo citado precisa existir em `resumo.json`. As regras de `regras-achados.md` valem (sem
    genéricos, ação concreta, não repetir ignorados).
 2. **`fixar_no_perfil`**: até 6 repos que melhor provam o objetivo de
    `perfil.md`, com o motivo de cada um e considerando o potencial após
    correções baratas. Só repos públicos (ou privados cuja publicação seja
    recomendada num achado).
 3. **`arquivar`**: repos que atrapalham o portfólio ou não têm mais uso, com
-   motivo (ex.: repos vazios, exercícios sem código próprio, duplicatas).
+   motivo (ex.: repos vazios, exercícios sem código próprio, duplicatas). Um
+   repo não pode estar ao mesmo tempo em `fixar_no_perfil` e `arquivar`.
 
 ## Saída
 
 Grave `<run_dir>/transversal.json` seguindo o schema. Se o hook rejeitar,
 corrija e regrave. Responda com uma linha:
-`transversal: X achados, Y para fixar, Z para arquivar`.
+`transversal: X achados novos, W reconciliados, Y para fixar, Z para arquivar`.

@@ -34,6 +34,10 @@ Cada análise acontece num diretório autocontido em `~/.mwdx/runs/<repo>/<ts>/`
 | `execucao.json` | executor-container |
 | `higiene.json`, `arquitetura.json`, `portfolio.json` | especialistas |
 
+A visão transversal usa `~/.mwdx/runs/_transversal/<ts>/`, com `resumo.json`
+(CLI: todos os repos, notas, achados e os achados transversais ativos) e
+`transversal.json` (estrategista).
+
 ## Desenvolvimento
 
 O pnpm vem via corepack (`packageManager` no `package.json`), sem instalação global:
@@ -50,6 +54,9 @@ Uso (dados em `~/.mwdx`, ou em `MWDX_HOME`):
 ```bash
 node packages/cli/bin/mwdx.js repos sync
 node packages/cli/bin/mwdx.js scan tilapia            # pula se o HEAD não mudou; --force para reanalisar
+node packages/cli/bin/mwdx.js scan --all --listar     # mostra a fila (sem vazios, arquivados e forks)
+node packages/cli/bin/mwdx.js scan --all --limite 10  # concorrência 2; retomável; para no limite da assinatura
+node packages/cli/bin/mwdx.js estrategia              # visão transversal (precisa de ≥ 2 repos analisados)
 node packages/cli/bin/mwdx.js achado tilapia-higiene-2 ignorado --motivo "..."
 node packages/cli/bin/mwdx.js ingest ~/.mwdx/runs/<repo>/<ts>
 ```
@@ -81,4 +88,4 @@ cd "$RUN" && claude -p "/mwdx:analisar-repo bioquest $RUN" \
 - [x] Fatia 2: `repos sync`, clone em cache, `scan` + `ingest` no SQLite + reconciliação
 - [x] Fatia 3: executor em container
 - [x] Fatia 4: dashboard
-- [ ] Fatia 5: `scan --all`, `estrategia`, quick-wins e portfólio
+- [x] Fatia 5: `scan --all`, `estrategia`, quick-wins e portfólio

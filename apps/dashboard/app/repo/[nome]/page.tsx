@@ -1,19 +1,16 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { STATUS_ATIVOS, detalheRepo } from "@mwdx/db";
-import { CopiarPrompt } from "../../../components/CopiarPrompt.tsx";
+import { CartaoAchado } from "../../../components/CartaoAchado.tsx";
 import { DIMENSOES, data, dinheiro } from "../../../components/formato.ts";
-import { MudarStatus } from "../../../components/MudarStatus.tsx";
+import { Disparar } from "../../../components/Disparar.tsx";
 import { Nota } from "../../../components/Nota.tsx";
-import { Reanalisar } from "../../../components/Reanalisar.tsx";
 import { Sparkline } from "../../../components/Sparkline.tsx";
 import { db } from "../../../lib/db.ts";
 import { donoGithub } from "../../../lib/github.ts";
-import { promptCorrecao, semWork } from "../../../lib/prompt.ts";
+import { reanalisarAcao } from "../../../lib/acoes.ts";
+import { promptCorrecao } from "../../../lib/prompt.ts";
 
 export const dynamic = "force-dynamic";
-
-const ESCALA = ["", "baixo", "médio", "alto"];
 
 export default async function Repo({ params }: { params: Promise<{ nome: string }> }) {
   const { nome } = await params;
@@ -31,15 +28,13 @@ export default async function Repo({ params }: { params: Promise<{ nome: string 
   return (
     <>
       <header className="topo">
-        <h1>
-          <Link href="/">mwdx</Link> / {repo.nome}
-        </h1>
+        <h1>{repo.nome}</h1>
         {dono && (
           <a href={`https://github.com/${dono}/${repo.nome}`} target="_blank" rel="noreferrer">
             GitHub ↗
           </a>
         )}
-        <Reanalisar repo={repo.nome} rodando={rodando} />
+        <Disparar acao={reanalisarAcao.bind(null, repo.nome)} rodando={rodando} rotulo="reanalisar" />
       </header>
       {repo.descricao && <p className="suave">{repo.descricao}</p>}
 
@@ -70,40 +65,7 @@ export default async function Repo({ params }: { params: Promise<{ nome: string 
               Achados · {dim} <span className="suave">({nAtivos} ativos de {lista.length})</span>
             </h2>
             {lista.map((a) => (
-              <article key={a.id} className={`cartao achado ${ativos.has(a.status) ? "" : "inativo"}`}>
-                <div>
-                  <span className="chip">{a.tipo}</span>
-                  <span className={`chip ${a.impacto === 3 ? "ruim" : ""}`}>impacto {ESCALA[a.impacto]}</span>
-                  <span className="chip">esforço {ESCALA[a.esforco]}</span>
-                  <span className="suave">{a.id}</span>
-                </div>
-                <div className="titulo">{a.titulo}</div>
-                <p>{a.acao}</p>
-                <ul>
-                  {a.evidencias.map((e, i) => (
-                    <li key={i}>
-                      {"arquivo" in e ? (
-                        <code>
-                          {e.arquivo}
-                          {e.linha ? `:${e.linha}` : ""}
-                        </code>
-                      ) : "execucao" in e ? (
-                        <code>{semWork(e.execucao)}</code>
-                      ) : (
-                        <code>github.{e.github}</code>
-                      )}{" "}
-                      <span className="suave">— {e.obs}</span>
-                    </li>
-                  ))}
-                </ul>
-                {a.status === "ignorado" && a.ultimoEvento?.motivo && (
-                  <p className="suave">Ignorado: {a.ultimoEvento.motivo}</p>
-                )}
-                <div className="acoes">
-                  <MudarStatus repo={repo.nome} id={a.id} status={a.status} />
-                  {ativos.has(a.status) && <CopiarPrompt texto={promptCorrecao(repo.nome, a, execucao)} />}
-                </div>
-              </article>
+              <CartaoAchado key={a.id} achado={a} prompt={promptCorrecao(repo.nome, a, execucao)} />
             ))}
           </section>
         );

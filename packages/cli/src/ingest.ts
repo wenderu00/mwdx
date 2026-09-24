@@ -5,9 +5,11 @@ import {
   DIMENSOES,
   type Execucao,
   type RelatorioDimensao,
+  Resumo,
+  type Transversal,
   validarArquivoRun,
 } from "@mwdx/schema";
-import { aplicarRelatorios, type Db, type ResultadoIngest } from "@mwdx/db";
+import { aplicarRelatorios, aplicarTransversal, type Db, type ResultadoIngest } from "@mwdx/db";
 
 export type Ingestao = ResultadoIngest & {
   status: "ok" | "parcial";
@@ -52,6 +54,19 @@ export function ingerirRunDir(db: Db, runDir: string, runId: string): Ingestao {
     dimensoes: relatorios.map((r) => r.dimensao),
     problemas,
   };
+}
+
+export type IngestaoTransversal = ResultadoIngest & { fixar: number; arquivar: number };
+
+// transversal.json é tudo ou nada: sem ele válido, não há o que aplicar.
+export function ingerirTransversal(db: Db, runDir: string, runId: string): IngestaoTransversal {
+  const resumo = Resumo.parse(lerJson(path.join(runDir, "resumo.json")));
+  const dados = lerOpcional(path.join(runDir, "transversal.json"));
+  if (dados === undefined) throw new Error("transversal.json: ausente");
+  const erros = validarArquivoRun("transversal.json", dados, null, resumo);
+  if (erros.length) throw new Error(`transversal.json inválido:\n${erros.join("\n")}`);
+  const tr = dados as Transversal;
+  return { ...aplicarTransversal(db, runId, tr), fixar: tr.fixar_no_perfil.length, arquivar: tr.arquivar.length };
 }
 
 function lerJson(arquivo: string): unknown {

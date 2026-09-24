@@ -112,13 +112,52 @@ export type Contexto = z.infer<typeof Contexto>;
 export const AchadoTransversal = AchadoNovo.extend({
   repos: z.array(texto).min(1),
 });
+export type AchadoTransversal = z.infer<typeof AchadoTransversal>;
+
+// Na visão transversal não existe "regrediu": o achado persiste ou foi resolvido.
+export const ReconciliacaoTransversal = Reconciliacao.extend({
+  veredito: z.enum(["persistente", "resolvido"]),
+});
 
 export const Transversal = z.strictObject({
+  // um item por achado de resumo.json → achados_transversais_ativos
+  reconciliacao: z.array(ReconciliacaoTransversal),
   achados_novos: z.array(AchadoTransversal),
   fixar_no_perfil: z.array(z.strictObject({ repo: texto, motivo: texto })).max(6),
   arquivar: z.array(z.strictObject({ repo: texto, motivo: texto })),
 });
 export type Transversal = z.infer<typeof Transversal>;
+
+// Escrito pela CLI para a análise transversal: o estado de todos os repos.
+export const ResumoRepo = z.strictObject({
+  repo: texto,
+  github: z.record(z.string(), z.unknown()),
+  stack: z.string().nullable(),
+  analisado_em: z.string().nullable().describe("null = nunca analisado (só metadados do GitHub)"),
+  notas: z.partialRecord(Dimensao, z.int().min(0).max(100)),
+  achados_ativos: z.array(
+    z.strictObject({
+      id: texto,
+      dimensao: Dimensao,
+      tipo: z.enum(["lacuna", "oportunidade"]),
+      titulo: texto,
+      impacto: z.int(),
+      esforco: z.int(),
+      status: StatusAchado,
+    }),
+  ),
+  ignorados: z.array(z.strictObject({ id: texto, dimensao: Dimensao, titulo: texto, motivo: texto })),
+});
+
+export const Resumo = z.strictObject({
+  gerado_em: texto,
+  repos: z.array(ResumoRepo),
+  // o estrategista deve reconciliar cada um destes
+  achados_transversais_ativos: z.array(AchadoTransversal.extend({ id: texto, status: StatusAchado })),
+  // não sugerir de novo
+  transversais_ignorados: z.array(z.strictObject({ id: texto, titulo: texto, motivo: texto })),
+});
+export type Resumo = z.infer<typeof Resumo>;
 
 export const ARQUIVOS_RUN = {
   "execucao.json": Execucao,
@@ -127,6 +166,7 @@ export const ARQUIVOS_RUN = {
   "portfolio.json": RelatorioDimensao,
   "contexto.json": Contexto,
   "transversal.json": Transversal,
+  "resumo.json": Resumo,
 } as const;
 export type ArquivoRun = keyof typeof ARQUIVOS_RUN;
 
@@ -140,6 +180,7 @@ export function validarArquivoRun(
   nome: ArquivoRun,
   dados: unknown,
   contexto?: Contexto | null,
+  resumo?: Resumo | null,
 ): string[] {
   const r = ARQUIVOS_RUN[nome].safeParse(dados);
   if (!r.success) {
@@ -148,7 +189,35 @@ export function validarArquivoRun(
   if (nome === "higiene.json" || nome === "arquitetura.json" || nome === "portfolio.json") {
     return regrasRelatorio(nome, r.data as RelatorioDimensao, contexto ?? null);
   }
+  if (nome === "transversal.json" && resumo) return regrasTransversal(r.data as Transversal, resumo);
   return [];
+}
+
+function regrasTransversal(tr: Transversal, resumo: Resumo): string[] {
+  const erros: string[] = [];
+  const repos = new Set(resumo.repos.map((r) => r.repo));
+  const conferir = (caminho: string, repo: string) => {
+    if (!repos.has(repo)) erros.push(`${caminho}: repo "${repo}" não existe em resumo.json`);
+  };
+  tr.achados_novos.forEach((a, i) => a.repos.forEach((repo, j) => conferir(`achados_novos.${i}.repos.${j}`, repo)));
+  tr.fixar_no_perfil.forEach((f, i) => conferir(`fixar_no_perfil.${i}.repo`, f.repo));
+  tr.arquivar.forEach((a, i) => conferir(`arquivar.${i}.repo`, a.repo));
+  const fixados = new Set(tr.fixar_no_perfil.map((f) => f.repo));
+  for (const [i, a] of tr.arquivar.entries()) {
+    if (fixados.has(a.repo)) erros.push(`arquivar.${i}: "${a.repo}" também está em fixar_no_perfil`);
+  }
+
+  const ativos = new Map(resumo.achados_transversais_ativos.map((a) => [a.id, a]));
+  const vistos = new Set<string>();
+  for (const [i, rec] of tr.reconciliacao.entries()) {
+    if (!ativos.has(rec.id)) erros.push(`reconciliacao.${i}.id: "${rec.id}" não existe em resumo.json → achados_transversais_ativos`);
+    if (vistos.has(rec.id)) erros.push(`reconciliacao.${i}.id: "${rec.id}" reconciliado duas vezes`);
+    vistos.add(rec.id);
+  }
+  for (const a of ativos.values()) {
+    if (!vistos.has(a.id)) erros.push(`reconciliacao: achado transversal ativo "${a.id}" (${a.titulo}) não foi reconciliado`);
+  }
+  return erros;
 }
 
 function regrasRelatorio(nome: string, rel: RelatorioDimensao, ctx: Contexto | null): string[] {

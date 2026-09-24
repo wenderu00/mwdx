@@ -5,13 +5,17 @@ import Database from "better-sqlite3";
 import { and, desc, eq, inArray, like } from "drizzle-orm";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import type {
-  AchadoExistente,
-  Contexto,
-  Dimensao,
-  Execucao,
-  RelatorioDimensao,
-  StatusAchado,
+import {
+  type AchadoExistente,
+  type AchadoNovo,
+  type Contexto,
+  type Dimensao,
+  type Evidencia,
+  type Execucao,
+  type RelatorioDimensao,
+  Resumo,
+  type StatusAchado,
+  type Transversal,
 } from "@mwdx/schema";
 import * as t from "./tabelas.ts";
 
@@ -165,13 +169,68 @@ export function historicoParaContexto(
 
 const numeroDoId = (id: string) => Number(id.slice(id.lastIndexOf("-") + 1)) || 0;
 
-function proximoNumero(db: Pick<Db, "select">, repo: string, dimensao: string): number {
-  const prefixo = `${repo}-${dimensao}-`;
+function proximoNumero(db: Pick<Db, "select">, prefixo: string): number {
   const ids = db.select({ id: t.achados.id }).from(t.achados).where(like(t.achados.id, `${prefixo}%`)).all();
   return ids.reduce((max, { id }) => Math.max(max, numeroDoId(id)), 0) + 1;
 }
 
 export type ResultadoIngest = { novos: string[]; reconciliados: number; mudancas: number };
+
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+type Veredito = { id: string; veredito: "persistente" | "resolvido" | "regrediu"; evidencias: Evidencia[] };
+
+function reconciliar(tx: Tx, runId: string, em: string, rec: Veredito, res: ResultadoIngest) {
+  const atual = tx.select().from(t.achados).where(eq(t.achados.id, rec.id)).get();
+  if (!atual) throw new Error(`reconciliação de achado inexistente: ${rec.id}`);
+  // "persistente" mantém o status escolhido pelo usuário (em_andamento, adiado...)
+  const para = rec.veredito === "persistente" ? atual.status : rec.veredito;
+  tx.update(t.achados)
+    .set({ status: para, evidencias_json: rec.evidencias, atualizado_run: runId })
+    .where(eq(t.achados.id, rec.id))
+    .run();
+  res.reconciliados++;
+  if (para !== atual.status) {
+    res.mudancas++;
+    tx.insert(t.achadoEventos)
+      .values({ achado_id: rec.id, de: atual.status, para, origem: "agente", run_id: runId, em })
+      .run();
+  }
+}
+
+function criarAchados(
+  tx: Tx,
+  runId: string,
+  em: string,
+  alvo: { repo: string; dimensao: string; prefixo: string },
+  novos: (AchadoNovo & { repos?: string[] })[],
+  res: ResultadoIngest,
+) {
+  let n = proximoNumero(tx, alvo.prefixo);
+  for (const { repos, ...novo } of novos) {
+    const id = `${alvo.prefixo}${n++}`;
+    tx.insert(t.achados)
+      .values({
+        id,
+        repo: alvo.repo,
+        dimensao: alvo.dimensao,
+        tipo: novo.tipo,
+        titulo: novo.titulo,
+        evidencias_json: novo.evidencias,
+        impacto: novo.impacto,
+        esforco: novo.esforco,
+        acao: novo.acao,
+        status: "aberto",
+        criado_run: runId,
+        atualizado_run: runId,
+        repos_json: repos ?? null,
+      })
+      .run();
+    tx.insert(t.achadoEventos)
+      .values({ achado_id: id, de: null, para: "aberto", origem: "agente", run_id: runId, em })
+      .run();
+    res.novos.push(id);
+  }
+}
 
 // Aplica os relatórios de um run: notas, reconciliação dos achados existentes e
 // criação dos novos com id estável. Tudo numa transação.
@@ -195,52 +254,84 @@ export function aplicarRelatorios(
       tx.insert(t.notas)
         .values({ run_id: runId, dimensao: rel.dimensao, valor: rel.nota, justificativa: rel.justificativa })
         .run();
-
-      for (const rec of rel.reconciliacao) {
-        const atual = tx.select().from(t.achados).where(eq(t.achados.id, rec.id)).get();
-        if (!atual) throw new Error(`reconciliação de achado inexistente: ${rec.id}`);
-        // "persistente" mantém o status escolhido pelo usuário (em_andamento, adiado...)
-        const para = rec.veredito === "persistente" ? atual.status : rec.veredito;
-        tx.update(t.achados)
-          .set({ status: para, evidencias_json: rec.evidencias, atualizado_run: runId })
-          .where(eq(t.achados.id, rec.id))
-          .run();
-        res.reconciliados++;
-        if (para !== atual.status) {
-          res.mudancas++;
-          tx.insert(t.achadoEventos)
-            .values({ achado_id: rec.id, de: atual.status, para, origem: "agente", run_id: runId, em })
-            .run();
-        }
-      }
-
-      let n = proximoNumero(tx, repo, rel.dimensao);
-      for (const novo of rel.achados_novos) {
-        const id = `${repo}-${rel.dimensao}-${n++}`;
-        tx.insert(t.achados)
-          .values({
-            id,
-            repo,
-            dimensao: rel.dimensao,
-            tipo: novo.tipo,
-            titulo: novo.titulo,
-            evidencias_json: novo.evidencias,
-            impacto: novo.impacto,
-            esforco: novo.esforco,
-            acao: novo.acao,
-            status: "aberto",
-            criado_run: runId,
-            atualizado_run: runId,
-          })
-          .run();
-        tx.insert(t.achadoEventos)
-          .values({ achado_id: id, de: null, para: "aberto", origem: "agente", run_id: runId, em })
-          .run();
-        res.novos.push(id);
-      }
+      for (const rec of rel.reconciliacao) reconciliar(tx, runId, em, rec, res);
+      criarAchados(tx, runId, em, { repo, dimensao: rel.dimensao, prefixo: `${repo}-${rel.dimensao}-` }, rel.achados_novos, res);
     }
   });
   return res;
+}
+
+// ---------- visão transversal ----------
+
+// Achados transversais ficam na mesma tabela, com repo e dimensão fixos e os
+// repos envolvidos em repos_json.
+export const REPO_TRANSVERSAL = "_transversal";
+const PREFIXO_TRANSVERSAL = "transversal-";
+
+export function aplicarTransversal(db: Db, runId: string, tr: Transversal): ResultadoIngest {
+  const em = agora();
+  const res: ResultadoIngest = { novos: [], reconciliados: 0, mudancas: 0 };
+  db.transaction((tx) => {
+    const jaIngerido =
+      tx.select().from(t.recomendacoes).where(eq(t.recomendacoes.run_id, runId)).get() ??
+      tx.select().from(t.achados).where(eq(t.achados.atualizado_run, runId)).get();
+    if (jaIngerido) throw new Error(`run ${runId} já foi ingerido`);
+
+    for (const rec of tr.reconciliacao) reconciliar(tx, runId, em, rec, res);
+    criarAchados(tx, runId, em, { repo: REPO_TRANSVERSAL, dimensao: "transversal", prefixo: PREFIXO_TRANSVERSAL }, tr.achados_novos, res);
+    for (const [tipo, lista] of [["fixar", tr.fixar_no_perfil], ["arquivar", tr.arquivar]] as const) {
+      for (const r of lista) tx.insert(t.recomendacoes).values({ run_id: runId, tipo, repo: r.repo, motivo: r.motivo }).run();
+    }
+  });
+  return res;
+}
+
+// Entrada do estrategista: o estado de todos os repos e dos achados transversais.
+export function resumoTransversal(db: Db): Resumo {
+  const repos = db.select().from(t.repos).orderBy(desc(t.repos.pushed_at)).all();
+  const runs = db
+    .select()
+    .from(t.runs)
+    .where(inArray(t.runs.status, ["ok", "parcial"]))
+    .orderBy(desc(t.runs.iniciado))
+    .all();
+  const ultimo = new Map<string, (typeof runs)[number]>();
+  for (const r of runs) if (!ultimo.has(r.repo)) ultimo.set(r.repo, r);
+  const notas = new Map<string, Record<string, number>>();
+  const ids = [...ultimo.values()].map((r) => r.id);
+  if (ids.length) {
+    for (const n of db.select().from(t.notas).where(inArray(t.notas.run_id, ids)).all()) {
+      notas.set(n.run_id, { ...notas.get(n.run_id), [n.dimensao]: n.valor });
+    }
+  }
+
+  const transversal = historicoParaContexto(db, REPO_TRANSVERSAL);
+  const linhasTransversais = new Map(
+    db.select().from(t.achados).where(eq(t.achados.repo, REPO_TRANSVERSAL)).all().map((a) => [a.id, a]),
+  );
+  return Resumo.parse({
+    gerado_em: agora(),
+    repos: repos.map((repo) => {
+      const run = ultimo.get(repo.nome);
+      const h = historicoParaContexto(db, repo.nome);
+      return {
+        repo: repo.nome,
+        github: repo.github_json as Record<string, unknown>,
+        stack: (run?.execucao_json as Execucao | null)?.stack ?? null,
+        analisado_em: run?.iniciado ?? null,
+        notas: (run && notas.get(run.id)) ?? {},
+        achados_ativos: h.achados_ativos.map(({ id, dimensao, tipo, titulo, impacto, esforco, status }) => ({
+          id, dimensao, tipo, titulo, impacto, esforco, status,
+        })),
+        ignorados: h.ignorados,
+      };
+    }),
+    achados_transversais_ativos: transversal.achados_ativos.map(({ dimensao: _, ...a }) => ({
+      ...a,
+      repos: (linhasTransversais.get(a.id)?.repos_json as string[] | null) ?? [],
+    })),
+    transversais_ignorados: transversal.ignorados.map(({ id, titulo, motivo }) => ({ id, titulo, motivo })),
+  });
 }
 
 const STATUS_DO_USUARIO: StatusAchado[] = ["aberto", "em_andamento", "adiado", "ignorado", "resolvido"];

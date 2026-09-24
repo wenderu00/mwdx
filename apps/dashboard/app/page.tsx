@@ -29,7 +29,7 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<F
     <>
       <AtualizarEnquanto ativo={todos.some((r) => r.rodando)} />
       <header className="topo">
-        <h1>mwdx</h1>
+        <h1>Repos</h1>
         <span className="suave">
           {analisados.length} de {todos.length} repos analisados · {ativos} achados ativos
         </span>

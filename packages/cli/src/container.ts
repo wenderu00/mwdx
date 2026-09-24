@@ -2,7 +2,9 @@ import { execFileSync } from "node:child_process";
 import os from "node:os";
 import { sh } from "./sh.ts";
 
-const ORFAO_MS = 60 * 60_000;
+// Com `scan --all` rodando dois repos em paralelo, um container vivo de outra
+// análise pode ter quase 1h (timeout do claude de 45 min + clone e pull).
+const ORFAO_MS = 2 * 60 * 60_000;
 
 // O prefixo `mwdx-` é o único que plugin/scripts/exec-container.sh aceita.
 export function nomeContainer(repo: string, ts: string): string {
@@ -37,11 +39,32 @@ export async function derrubarContainer(nome: string): Promise<void> {
   await sh("docker", ["rm", "-f", nome]).catch(() => {});
 }
 
-// Síncrono para poder rodar num handler de SIGINT.
-export function derrubarContainerSync(nome: string): void {
-  try {
-    execFileSync("docker", ["rm", "-f", nome], { stdio: "ignore" });
-  } catch {}
+// Containers vivos neste processo: um único handler de SIGINT/SIGTERM derruba
+// todos (com vários scans em paralelo, handlers por scan sairiam no primeiro).
+const ativos = new Set<string>();
+function aoInterromper() {
+  for (const nome of ativos) {
+    try {
+      execFileSync("docker", ["rm", "-f", nome], { stdio: "ignore" });
+    } catch {}
+  }
+  process.exit(130);
+}
+
+export function registrarAtivo(nome: string): void {
+  if (!ativos.size) {
+    process.once("SIGINT", aoInterromper);
+    process.once("SIGTERM", aoInterromper);
+  }
+  ativos.add(nome);
+}
+
+export function liberarAtivo(nome: string): void {
+  ativos.delete(nome);
+  if (!ativos.size) {
+    process.off("SIGINT", aoInterromper);
+    process.off("SIGTERM", aoInterromper);
+  }
 }
 
 // Linhas "<nome> <mwdx.inicio>" de `docker ps` → nomes com mais de `maxIdadeMs`.
