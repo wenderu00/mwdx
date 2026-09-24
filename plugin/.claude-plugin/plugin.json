@@ -1,0 +1,10 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "mwdx",
+  "version": "0.1.0",
+  "description": "Plataforma pessoal de Developer Experience: analisa cada repositório em higiene, arquitetura e portfólio, com evidências verificáveis e reconciliação entre execuções, e gera uma visão transversal de todos os projetos",
+  "author": {
+    "name": "Marcio Wendell",
+    "email": "marcio.wendell.contact@gmail.com"
+  }
+}

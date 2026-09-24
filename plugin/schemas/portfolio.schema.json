@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "repo": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dimensao": {
+      "type": "string",
+      "enum": [
+        "higiene",
+        "arquitetura",
+        "portfolio"
+      ]
+    },
+    "nota": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "justificativa": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reconciliacao": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "veredito": {
+            "type": "string",
+            "enum": [
+              "persistente",
+              "resolvido",
+              "regrediu"
+            ]
+          },
+          "evidencias": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "arquivo": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Caminho relativo à raiz do repo (ausência também vale: ex. '.github/')"
+                    },
+                    "linha": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "obs": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "arquivo",
+                    "obs"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "execucao": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Comando exatamente como aparece em execucao.json"
+                    },
+                    "obs": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "execucao",
+                    "obs"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "github": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Campo de contexto.json → github (ex. 'pushed_at', 'issues_abertas')"
+                    },
+                    "obs": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "github",
+                    "obs"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "veredito",
+          "evidencias"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "achados_novos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "lacuna",
+              "oportunidade"
+            ]
+          },
+          "titulo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "evidencias": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "arquivo": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Caminho relativo à raiz do repo (ausência também vale: ex. '.github/')"
+                    },
+                    "linha": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "obs": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "arquivo",
+                    "obs"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "execucao": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Comando exatamente como aparece em execucao.json"
+                    },
+                    "obs": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "execucao",
+                    "obs"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "github": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Campo de contexto.json → github (ex. 'pushed_at', 'issues_abertas')"
+                    },
+                    "obs": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "github",
+                    "obs"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "impacto": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "description": "1 = cosmético, 2 = relevante, 3 = crítico/alto retorno"
+          },
+          "esforco": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "description": "1 = < 1h, 2 = um dia, 3 = vários dias"
+          },
+          "acao": {
+            "type": "string",
+            "minLength": 20,
+            "description": "O que fazer, concreto o bastante para virar prompt de correção"
+          }
+        },
+        "required": [
+          "tipo",
+          "titulo",
+          "evidencias",
+          "impacto",
+          "esforco",
+          "acao"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "repo",
+    "dimensao",
+    "nota",
+    "justificativa",
+    "reconciliacao",
+    "achados_novos"
+  ],
+  "additionalProperties": false
+}

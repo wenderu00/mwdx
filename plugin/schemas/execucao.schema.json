@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "repo": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "parcial",
+        "sem_stack",
+        "sem_container"
+      ]
+    },
+    "stack": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "imagem": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "comandos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "etapa": {
+            "type": "string",
+            "enum": [
+              "install",
+              "test",
+              "build",
+              "audit",
+              "lint",
+              "outro"
+            ]
+          },
+          "comando": {
+            "type": "string",
+            "minLength": 1
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = timeout"
+          },
+          "duracao_s": {
+            "type": "number",
+            "minimum": 0
+          },
+          "resumo": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Trecho relevante da saída: contagens, erros, vulnerabilidades"
+          }
+        },
+        "required": [
+          "etapa",
+          "comando",
+          "exit_code",
+          "duracao_s",
+          "resumo"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "observacoes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "repo",
+    "status",
+    "stack",
+    "imagem",
+    "comandos",
+    "observacoes"
+  ],
+  "additionalProperties": false
+}

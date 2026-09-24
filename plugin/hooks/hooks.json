@@ -1,0 +1,29 @@
+{
+  "description": "Guardrails do mwdx: protege contexto.json/resumo.json (entradas escritas pela CLI) e valida cada JSON de saída dos agentes contra o schema Zod de packages/schema.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/proteger-entradas.ts"]
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/validar-saida.ts"]
+          }
+        ]
+      }
+    ]
+  }
+}
