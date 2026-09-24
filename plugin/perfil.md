@@ -11,7 +11,7 @@ define o que "bom" significa para as notas e os achados.
   deploy), capacidade de explicar decisões técnicas e entregar projetos completos.
 - **Público de quem avalia**: recrutadores (leem só o README, em ~30 segundos) e
   engenheiros (abrem o código, os testes e o histórico).
-- **Contexto dos repositórios**: 59 repos entre 2020 e 2026. Muitos antigos são de
+- **Contexto dos repositórios**: dezenas de repos entre 2020 e 2026. Muitos antigos são de
   bootcamp/disciplina (C#, JS); os recentes são TypeScript/Python, vários feitos
   com Claude Code (plugins com subagentes). Nem todo repo precisa virar vitrine —
   "arquivar" ou "tornar privado" é uma recomendação válida.

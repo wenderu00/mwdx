@@ -6,13 +6,14 @@ Code com subagentes) que analisa cada repositório do GitHub `wenderu00` em
 verificáveis e reconciliação entre execuções, além de uma **visão transversal**
 dos projetos.
 
-Plano completo: `~/.claude/plans/eu-quero-fazer-uma-synchronous-karp.md`.
+Plano completo: `~/.claude/plans/eu-quero-fazer-uma-synchronous-karp.md`. Próximos passos: [`docs/proximos-passos.md`](docs/proximos-passos.md).
 
 ## Estrutura
 
 ```
 packages/schema/   contratos Zod (fonte única) → plugin/schemas/*.schema.json
-packages/cli/      bin `mwdx` (hoje: `preparar`; depois: scan, ingest, estrategia)
+packages/db/       SQLite (Drizzle + better-sqlite3): repos, runs, notas, achados, achado_eventos
+packages/cli/      bin `mwdx`: repos sync, scan, ingest, achado, preparar
 plugin/            plugin Claude Code `mwdx`
   agents/          analisador-repo → executor-container → especialista-{higiene,arquitetura,portfolio} → auditor-relatorio
                    estrategista-portfolio (transversal)
@@ -43,7 +44,22 @@ corepack pnpm -r test
 corepack pnpm -r typecheck
 ```
 
-Analisar um repo local, sem container nem GitHub (fatia 1):
+Uso (dados em `~/.mwdx`, ou em `MWDX_HOME`):
+
+```bash
+node packages/cli/bin/mwdx.js repos sync
+node packages/cli/bin/mwdx.js scan tilapia            # pula se o HEAD não mudou; --force para reanalisar
+node packages/cli/bin/mwdx.js achado tilapia-higiene-2 ignorado --motivo "..."
+node packages/cli/bin/mwdx.js ingest ~/.mwdx/runs/<repo>/<ts>
+```
+
+`scan` roda `claude -p` com `--setting-sources project --strict-mcp-config`: só o
+plugin mwdx é carregado, sem os plugins, MCPs e hooks globais.
+
+Nova migração depois de mudar `packages/db/src/tabelas.ts`:
+`cd packages/db && ./node_modules/.bin/drizzle-kit generate --name <nome>`.
+
+Analisar um repo local sem GitHub nem banco (dev):
 
 ```bash
 RUN=$(node packages/cli/bin/mwdx.js preparar bioquest ~/projects/bioquest)
@@ -55,7 +71,7 @@ cd "$RUN" && claude -p "/mwdx:analisar-repo bioquest $RUN" \
 ## Estado
 
 - [x] Fatia 1: schema + plugin + hooks + `mwdx preparar`
-- [ ] Fatia 2: `repos sync`, clone em cache, `scan` + `ingest` no SQLite + reconciliação
+- [x] Fatia 2: `repos sync`, clone em cache, `scan` + `ingest` no SQLite + reconciliação
 - [ ] Fatia 3: executor em container
 - [ ] Fatia 4: dashboard
 - [ ] Fatia 5: `scan --all`, `estrategia`, quick-wins e portfólio
