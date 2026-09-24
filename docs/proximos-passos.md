@@ -88,4 +88,3 @@ Next.js (App Router) lendo o mesmo SQLite via `@mwdx/db`
   dados servem de base para um eval.
 - `mwdx preparar` e o comando manual do README servem só para depurar o plugin
   sem banco.
-- O repo não tem remoto no GitHub. Criar um (privado?) quando quiser.
