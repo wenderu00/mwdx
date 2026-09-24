@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import type { Contexto } from "@mwdx/schema";
@@ -15,9 +15,11 @@ import {
 } from "@mwdx/db";
 import { rodarClaude } from "./claude.ts";
 import { dirCache, garantirClone } from "./clone.ts";
+import { derrubarContainer, derrubarContainerSync, garantirImagem, limparOrfaos, nomeContainer, subirContainer } from "./container.ts";
 import { headRemoto, listarRepos, metadadosExtras, normalizarGithub } from "./github.ts";
 import { type Ingestao, ingerirRunDir } from "./ingest.ts";
 import { carimbo, prepararRunDir } from "./run-dir.ts";
+import { sh } from "./sh.ts";
 import { detectarStack } from "./stack.ts";
 
 export type ResultadoScan =
@@ -50,39 +52,82 @@ export async function scan(db: Db, repo: string, opts: { force?: boolean; log?: 
     if (remoto === ultimoHeadAnalisado(db, repo)) return { repo, pulado: `sem commits novos desde a última análise (${remoto.slice(0, 7)})` };
   }
 
+  await limparOrfaos().catch((e) => log(`aviso: limpeza de containers órfãos falhou: ${(e as Error).message}`));
+
   log(`clonando/atualizando ${repo}`);
   const head = await garantirClone(repo);
   const stack = detectarStack(dirCache(repo));
   const github = normalizarGithub(linha.github_json as RepoGithub, await metadadosExtras(repo));
 
+  // O nome é determinístico, então entra no contexto.json antes de o container
+  // existir; ele sobe depois, montando o work/ que prepararRunDir acabou de copiar.
+  const ts = carimbo();
+  const container = stack ? nomeContainer(repo, ts) : null;
   const contexto: Contexto = {
     repo,
     head_sha: head,
-    container: null, // fatia 3: container por stack
+    container,
     stack: stack?.stack ?? null,
     imagem: stack?.imagem ?? null,
     github,
     ...historicoParaContexto(db, repo),
   };
-  const ts = carimbo();
   const runId = `${repo}/${ts}`;
   const runDir = prepararRunDir({ codigo: dirCache(repo), contexto, ts });
   iniciarRun(db, { id: runId, repo, head_sha: head, run_dir: runDir });
 
-  log(`analisando ${repo} (${runDir})`);
-  const claude = await rodarClaude(`/mwdx:analisar-repo ${repo} ${runDir}`, runDir);
+  const erroContainer = container ? await prepararContainer(container, contexto, runDir, log) : null;
+  const aoInterromper = () => {
+    if (container) derrubarContainerSync(container);
+    process.exit(130);
+  };
+  process.once("SIGINT", aoInterromper);
+  process.once("SIGTERM", aoInterromper);
+
+  let claude: Awaited<ReturnType<typeof rodarClaude>>;
+  try {
+    log(`analisando ${repo} (${runDir})`);
+    claude = await rodarClaude(`/mwdx:analisar-repo ${repo} ${runDir}`, runDir);
+  } finally {
+    process.off("SIGINT", aoInterromper);
+    process.off("SIGTERM", aoInterromper);
+    if (contexto.container) await derrubarContainer(contexto.container);
+  }
   writeFileSync(path.join(runDir, "claude-resultado.json"), JSON.stringify(claude, null, 2) + "\n");
 
   let ingestao: Ingestao | null = null;
-  let erro = claude.erro;
+  let erro = [erroContainer, claude.erro].filter(Boolean).join("\n") || null;
   try {
     ingestao = ingerirRunDir(db, runDir, runId);
     if (ingestao.problemas.length) erro = [erro, ...ingestao.problemas].filter(Boolean).join("\n");
   } catch (e) {
     erro = [erro, (e as Error).message].filter(Boolean).join("\n");
   }
+  await limparGerados(path.join(runDir, "work"));
   const status = !ingestao ? "erro" : claude.ok ? ingestao.status : "parcial";
   finalizarRun(db, runId, { status, custo_usd: claude.custo_usd, duracao_s: claude.duracao_s, resumo: claude.texto || null, erro });
 
   return { repo, runId, runDir, status, custo_usd: claude.custo_usd, ingestao, erro };
+}
+
+// Sobe o container; se falhar, a análise segue sem ele (o executor registra
+// "sem_container") e o contexto.json é reescrito com container null.
+async function prepararContainer(nome: string, contexto: Contexto, runDir: string, log: (m: string) => void): Promise<string | null> {
+  try {
+    log(`subindo container ${nome} (${contexto.imagem})`);
+    await garantirImagem(contexto.imagem!);
+    await subirContainer(nome, contexto.imagem!, path.join(runDir, "work"));
+    return null;
+  } catch (e) {
+    await derrubarContainer(nome);
+    contexto.container = null;
+    writeFileSync(path.join(runDir, "contexto.json"), JSON.stringify(contexto, null, 2) + "\n");
+    return `container não subiu: ${(e as Error).message}`;
+  }
+}
+
+// Depois da análise, work/ só serve para conferir evidências: descarta o que o
+// container gerou (dependências, builds), que ocupa a maior parte do disco.
+async function limparGerados(work: string): Promise<void> {
+  if (existsSync(path.join(work, ".git"))) await sh("git", ["-C", work, "clean", "-ffdxq"]).catch(() => {});
 }

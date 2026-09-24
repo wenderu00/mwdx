@@ -72,6 +72,6 @@ cd "$RUN" && claude -p "/mwdx:analisar-repo bioquest $RUN" \
 
 - [x] Fatia 1: schema + plugin + hooks + `mwdx preparar`
 - [x] Fatia 2: `repos sync`, clone em cache, `scan` + `ingest` no SQLite + reconciliação
-- [ ] Fatia 3: executor em container
+- [x] Fatia 3: executor em container
 - [ ] Fatia 4: dashboard
 - [ ] Fatia 5: `scan --all`, `estrategia`, quick-wins e portfólio

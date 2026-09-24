@@ -1,8 +1,8 @@
 # Próximos passos
 
-Estado em 2026-09-24: fatias 1 e 2 concluídas e verificadas ponta a ponta
+Estado em 2026-09-24: fatias 1, 2 e 3 concluídas e verificadas ponta a ponta
 (bioquest via `claude -p` direto; tilapia via `mwdx scan`, com reanálise
-`--force` confirmando a reconciliação). Plano original:
+`--force` confirmando a reconciliação; tilapia e GamingShoppingApp com container). Plano original:
 `~/.claude/plans/eu-quero-fazer-uma-synchronous-karp.md`.
 
 ## Retomar
@@ -10,40 +10,30 @@ Estado em 2026-09-24: fatias 1 e 2 concluídas e verificadas ponta a ponta
 ```bash
 cd ~/projects/mwdx
 corepack pnpm install
-corepack pnpm -r test && corepack pnpm -r typecheck   # 24 testes
+corepack pnpm -r test && corepack pnpm -r typecheck   # 26 testes
 ```
 
 `~/.mwdx` ainda está vazio. Os testes reais rodaram num `MWDX_HOME` de rascunho.
 O primeiro uso de verdade é `node packages/cli/bin/mwdx.js repos sync`.
 
-## Fatia 3: executor em container
+## Fatia 3: executor em container (concluída)
 
-Hoje `scan` grava `container: null` (em `packages/cli/src/scan.ts`, comentário
-"fatia 3"), e o executor registra `status: "sem_container"`.
+`packages/cli/src/container.ts` + `scan.ts`: o nome `mwdx-<repo>-<ts>` entra no
+`contexto.json` antes de o container subir (montando o `work/` já copiado), com
+`--user` local e `HOME=/tmp`. Se o container não sobe, o run segue com
+`container: null` e o motivo vai para `runs.erro`. O container é derrubado em
+`finally` e em SIGINT/SIGTERM; órfãos com mais de 1h são removidos no início de
+cada `scan`. Depois do ingest, `git clean -ffdx` em `work/` descarta dependências
+e builds (tilapia: 1,4 MB).
 
-1. `packages/cli/src/container.ts`:
-   - `subirContainer(runDir, imagem, repo, ts)`: executa
-     `docker run -d --name mwdx-<repo>-<ts> --memory 4g --cpus 2 -v <runDir>/work:/work -w /work <imagem> sleep infinity`
-     e devolve o nome. O nome precisa começar com `mwdx-`, porque é o que
-     `plugin/scripts/exec-container.sh` aceita.
-   - `derrubarContainer(nome)`: `docker rm -f`, chamado em `finally` no `scan`
-     (inclusive em erro ou timeout do `claude -p`).
-   - `docker pull` da imagem na primeira vez (as imagens estão em `stack.ts`).
-   - Limpeza de órfãos: `docker ps -a --filter name=mwdx- -q`, rodada no início
-     de cada `scan`, para containers de mais de 1h.
-2. Em `scan.ts`: subir o container depois do `prepararRunDir` e preencher
-   `contexto.container`. **Atenção**: o `contexto.json` é escrito dentro do
-   `prepararRunDir`. Ou o container sobe antes (montando `work/` já copiado),
-   ou o `prepararRunDir` passa a aceitar o contexto depois da cópia.
-3. Arquivos criados pelo container (ex.: `node_modules` como root) ficam em
-   `runs/<repo>/<ts>/work`. Usar `--user $(id -u):$(id -g)` ou limpar `work/`
-   ao final. Decidir se vale guardar `work/` depois do ingest, já que ocupa disco.
-4. Verificar: `mwdx scan tilapia --force` (Node) e
-   `mwdx scan GamingShoppingApp --force` (.NET antigo, esperado registrar
-   runtime incompatível). Conferir o `execucao.json` e que
-   `docker ps -a | grep mwdx-` fica vazio.
-5. Medir de novo o custo por repo: vai subir com install e testes (hoje fica
-   entre US$ 2,30 e 4,20 equivalentes).
+Verificado: tilapia (Node, install/build/lint/audit reais, US$ 3,60) e
+GamingShoppingApp (net6.0 numa imagem SDK 8: registrou a incompatibilidade e
+testou com `DOTNET_ROLL_FORWARD=Major`, US$ 1,64 até bater o limite semanal).
+Nenhum `mwdx-*` sobrou em `docker ps -a`.
+
+Em aberto: testes e2e que precisam de servidor rodando ou do Chrome do Puppeteer
+ficam de fora (status `parcial`); a imagem é fixa por stack, então runtimes antigos
+dependem do roll-forward.
 
 ## Fatia 4: dashboard (`apps/dashboard`)
 
@@ -80,7 +70,8 @@ Next.js (App Router) lendo o mesmo SQLite via `@mwdx/db`
 
 ## Pendências e observações
 
-- **Custo**: US$ 2,30–4,20 equivalentes por repo (5–8 min). O baseline de 65
+- **Custo**: US$ 2,30–4,20 equivalentes por repo (5–8 min); com container,
+  tilapia ficou em US$ 3,60 (sem aumento relevante). O baseline de 65
   repos não vazios fica perto de US$ 200 no limite da assinatura. Começar pelos
   ativos.
 - **Qualidade**: só o auditor valida (decisão consciente). O motivo de cada
