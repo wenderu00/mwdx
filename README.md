@@ -14,6 +14,7 @@ Plano completo: `~/.claude/plans/eu-quero-fazer-uma-synchronous-karp.md`. Próxi
 packages/schema/   contratos Zod (fonte única) → plugin/schemas/*.schema.json
 packages/db/       SQLite (Drizzle + better-sqlite3): repos, runs, notas, achados, achado_eventos
 packages/cli/      bin `mwdx`: repos sync, scan, ingest, achado, preparar
+apps/dashboard/    Next.js local: notas, achados, triagem, prompt de correção, reanálise
 plugin/            plugin Claude Code `mwdx`
   agents/          analisador-repo → executor-container → especialista-{higiene,arquitetura,portfolio} → auditor-relatorio
                    estrategista-portfolio (transversal)
@@ -53,6 +54,12 @@ node packages/cli/bin/mwdx.js achado tilapia-higiene-2 ignorado --motivo "..."
 node packages/cli/bin/mwdx.js ingest ~/.mwdx/runs/<repo>/<ts>
 ```
 
+Dashboard em http://127.0.0.1:4400 (lê o mesmo `~/.mwdx/mwdx.db`; só escuta em localhost, sem autenticação):
+
+```bash
+corepack pnpm --filter @mwdx/dashboard dev
+```
+
 `scan` roda `claude -p` com `--setting-sources project --strict-mcp-config`: só o
 plugin mwdx é carregado, sem os plugins, MCPs e hooks globais.
 
@@ -73,5 +80,5 @@ cd "$RUN" && claude -p "/mwdx:analisar-repo bioquest $RUN" \
 - [x] Fatia 1: schema + plugin + hooks + `mwdx preparar`
 - [x] Fatia 2: `repos sync`, clone em cache, `scan` + `ingest` no SQLite + reconciliação
 - [x] Fatia 3: executor em container
-- [ ] Fatia 4: dashboard
+- [x] Fatia 4: dashboard
 - [ ] Fatia 5: `scan --all`, `estrategia`, quick-wins e portfólio

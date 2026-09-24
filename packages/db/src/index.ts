@@ -24,13 +24,15 @@ export function caminhoDbPadrao(): string {
   return path.join(home, "mwdx.db");
 }
 
-export function abrirDb(arquivo = caminhoDbPadrao()): Db {
+// `migracoes` existe para quem empacota este módulo (o dashboard no Next), onde
+// import.meta.dirname não aponta mais para packages/db/src.
+export function abrirDb(arquivo = caminhoDbPadrao(), migracoes = path.resolve(import.meta.dirname, "../drizzle")): Db {
   if (arquivo !== ":memory:") mkdirSync(path.dirname(arquivo), { recursive: true });
   const sqlite = new Database(arquivo);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("busy_timeout = 5000");
   const db = drizzle(sqlite, { schema: t });
-  migrate(db, { migrationsFolder: path.resolve(import.meta.dirname, "../drizzle") });
+  migrate(db, { migrationsFolder: migracoes });
   return db;
 }
 
@@ -258,3 +260,5 @@ export function mudarStatus(db: Db, achadoId: string, para: StatusAchado, motivo
       .run();
   });
 }
+
+export * from "./consultas.ts";

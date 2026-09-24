@@ -1,6 +1,6 @@
 # Próximos passos
 
-Estado em 2026-09-24: fatias 1, 2 e 3 concluídas e verificadas ponta a ponta
+Estado em 2026-09-24: fatias 1 a 4 concluídas e verificadas ponta a ponta
 (bioquest via `claude -p` direto; tilapia via `mwdx scan`, com reanálise
 `--force` confirmando a reconciliação; tilapia e GamingShoppingApp com container). Plano original:
 `~/.claude/plans/eu-quero-fazer-uma-synchronous-karp.md`.
@@ -10,11 +10,12 @@ Estado em 2026-09-24: fatias 1, 2 e 3 concluídas e verificadas ponta a ponta
 ```bash
 cd ~/projects/mwdx
 corepack pnpm install
-corepack pnpm -r test && corepack pnpm -r typecheck   # 26 testes
+corepack pnpm -r test && corepack pnpm -r typecheck   # 32 testes
 ```
 
 `~/.mwdx` ainda está vazio. Os testes reais rodaram num `MWDX_HOME` de rascunho.
 O primeiro uso de verdade é `node packages/cli/bin/mwdx.js repos sync`.
+Dashboard: `corepack pnpm --filter @mwdx/dashboard dev` → http://127.0.0.1:4400.
 
 ## Fatia 3: executor em container (concluída)
 
@@ -35,23 +36,27 @@ Em aberto: testes e2e que precisam de servidor rodando ou do Chrome do Puppeteer
 ficam de fora (status `parcial`); a imagem é fixa por stack, então runtimes antigos
 dependem do roll-forward.
 
-## Fatia 4: dashboard (`apps/dashboard`)
+## Fatia 4: dashboard (concluída)
 
-Next.js (App Router) lendo o mesmo SQLite via `@mwdx/db`
-(`abrirDb`, `mudarStatus`, `historicoParaContexto`).
+`apps/dashboard` (Next.js 16, App Router) lê o SQLite pelas consultas de
+`packages/db/src/consultas.ts` (`painel`, `detalheRepo`).
 
-- `/`: tabela dos repos com as notas mais recentes por dimensão, filtros (stack,
-  visibilidade, ativo) e badge "HEAD mudou" (comparar `repos.pushed_at` com o
-  `iniciado` do último run).
-- `/repo/[nome]`: notas com histórico (sparkline), achados por dimensão, ações de
-  status (ignorar exige motivo) e **copiar prompt de correção** (achado +
-  evidências + ação + "rode no repo e verifique com ...").
-- Botão "reanalisar": route handler faz spawn detached de
-  `node packages/cli/bin/mwdx.js scan <repo> --force`; a UI consulta `runs.status`.
-- `better-sqlite3` no Next: declarar em `serverExternalPackages`.
-- As notas oscilam entre execuções sem mudança no código (tilapia: higiene
-  28 → 25, portfólio 12 → 18). Considerar mostrar tendência/faixa em vez de
-  destacar variações pequenas.
+- `/`: repos com notas do último run (seta só para variação ≥ 10, porque as notas
+  oscilam alguns pontos sem mudança no código), achados ativos, custo, badges
+  "HEAD mudou"/"analisando…" e filtros (stack, visibilidade, arquivados, só analisados).
+- `/repo/[nome]`: nota + sparkline + justificativa por dimensão, achados com troca
+  de status (Server Action em `mudarStatus`; ignorar exige motivo) e copiar prompt
+  de correção (`lib/prompt.ts`), histórico de runs.
+- Reanalisar: Server Action faz spawn desacoplado de `mwdx scan <repo> --force`,
+  com log em `~/.mwdx/logs/`; a página atualiza a cada 5 s enquanto há run rodando.
+- O Turbopack empacota os pacotes do workspace mesmo com `serverExternalPackages`,
+  então `abrirDb` aceita a pasta de migrações e o dashboard passa
+  `<raiz>/packages/db/drizzle` (raiz = `MWDX_RAIZ` ou `../..` do cwd).
+
+Verificado com `next build`/`start` e `dev` no banco de rascunho: páginas,
+troca de status pelo form (inclusive o erro de ignorar sem motivo) e o spawn da
+CLI (com repo inexistente, para não gastar análise). Falta ver a reanálise real
+terminando e o sparkline com mais de um run.
 
 ## Fatia 5: lote e visão transversal
 
