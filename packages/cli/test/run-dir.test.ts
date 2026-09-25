@@ -41,6 +41,15 @@ describe("prepararRunDir", () => {
     expect(JSON.parse(readFileSync(path.join(dir, "contexto.json"), "utf8")).repo).toBe("demo");
   });
 
+  it("usa o perfil de MWDX_HOME quando existe, e o exemplo do plugin quando não", () => {
+    const semPerfil = prepararRunDir({ codigo, contexto, ts: "t2" });
+    expect(readFileSync(path.join(semPerfil, "perfil.md"), "utf8")).toContain("Este é um exemplo");
+
+    writeFileSync(path.join(process.env.MWDX_HOME!, "perfil.md"), "# meu perfil\n");
+    const comPerfil = prepararRunDir({ codigo, contexto, ts: "t3" });
+    expect(readFileSync(path.join(comPerfil, "perfil.md"), "utf8")).toBe("# meu perfil\n");
+  });
+
   it("recusa contexto inválido antes de copiar qualquer coisa", () => {
     expect(() => prepararRunDir({ codigo, contexto: { ...contexto, repo: "" } })).toThrow();
     expect(existsSync(path.join(process.env.MWDX_HOME!, "runs"))).toBe(false);

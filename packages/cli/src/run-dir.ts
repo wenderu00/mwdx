@@ -1,7 +1,7 @@
 import { chmodSync, cpSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Contexto, Resumo } from "@mwdx/schema";
-import { PLUGIN, mwdxHome } from "./caminhos.ts";
+import { PLUGIN, caminhoPerfil, mwdxHome } from "./caminhos.ts";
 
 // Pastas pesadas e regeneráveis que não vale copiar para work/.
 const IGNORAR = new Set(["node_modules", ".venv", "venv", ".next", "__pycache__", ".pytest_cache"]);
@@ -32,7 +32,7 @@ export function prepararRunDir(opts: { codigo: string; contexto: Contexto; ts?: 
 
 function copiarReferencias(dir: string) {
   cpSync(path.join(PLUGIN, "schemas"), path.join(dir, "schemas"), { recursive: true });
-  cpSync(path.join(PLUGIN, "perfil.md"), path.join(dir, "perfil.md"));
+  cpSync(caminhoPerfil(), path.join(dir, "perfil.md"));
   cpSync(path.join(PLUGIN, "regras-achados.md"), path.join(dir, "regras-achados.md"));
 }
 

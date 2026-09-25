@@ -1,20 +1,16 @@
 # Próximos passos
 
-Estado em 2026-09-24: fatias 1 a 5 concluídas e verificadas ponta a ponta
+Estado em 2026-09-25: fatias 1 a 5 concluídas e verificadas ponta a ponta
 (bioquest via `claude -p` direto; tilapia via `mwdx scan`, com reanálise
-`--force` confirmando a reconciliação; tilapia e GamingShoppingApp com container). Plano original:
-`~/.claude/plans/eu-quero-fazer-uma-synchronous-karp.md`.
+`--force` confirmando a reconciliação; tilapia e GamingShoppingApp com container).
+Arquitetura e decisões: [`arquitetura.md`](arquitetura.md).
 
 ## Retomar
 
 ```bash
-cd ~/projects/mwdx
 corepack pnpm install
-corepack pnpm -r test && corepack pnpm -r typecheck   # 44 testes
+corepack pnpm -r test && corepack pnpm -r typecheck   # 49 testes
 ```
-
-`~/.mwdx` ainda está vazio. Os testes reais rodaram num `MWDX_HOME` de rascunho.
-O primeiro uso de verdade é `node packages/cli/bin/mwdx.js repos sync`.
 Dashboard: `corepack pnpm --filter @mwdx/dashboard dev` → http://127.0.0.1:4400.
 
 ## Fatia 3: executor em container (concluída)
@@ -96,12 +92,12 @@ com menos de 10 KB e repos sem push há mais de 3 anos. A escolha manual em
 ou na página do repo no dashboard (a home tem o chip "fora da fila" e um filtro).
 `scan <repo>` avulso ignora o filtro. Com o GitHub real, a fila caiu de 57 para 35.
 
-## Primeiro uso real
+## Primeiro uso real (em andamento)
 
-1. `node packages/cli/bin/mwdx.js repos sync` (o `~/.mwdx` real ainda está vazio).
-2. `scan --all --limite 5` para medir custo e qualidade nos repos mais ativos; depois o resto
-   (35 repos na fila × US$ 2–4 ≈ US$ 100 equivalentes; revisar antes com `scan --all --listar`).
-3. `mwdx estrategia` e revisar `/portfolio`.
+`repos sync` feito (69 repos) e 7 repos analisados (bioquest, familia_em_ritmo,
+mwdx, padrao-digital-pe, requisitos-pipeline, the-galadur, XPomodoro), mais uma
+visão transversal. Falta o resto da fila: `scan --all --listar` para revisar e depois
+`scan --all` (≈ 28 repos × US$ 1,50–4 equivalentes).
 
 ## Pendências e observações
 
