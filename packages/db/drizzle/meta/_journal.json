@@ -15,6 +15,13 @@
       "when": 1790252010058,
       "tag": "0001_transversal",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790283416720,
+      "tag": "0002_selecao",
+      "breakpoints": true
     }
   ]
 }

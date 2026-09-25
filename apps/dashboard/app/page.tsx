@@ -19,11 +19,15 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<F
     (r) =>
       (!f.stack || r.stack === f.stack) &&
       (!f.visibilidade || (f.visibilidade === "privado") === r.privado) &&
-      (situacao === "todos" || (situacao === "arquivados") === r.arquivado) &&
+      (situacao === "todos" ||
+        (situacao === "na-fila" && !r.foraDaFila) ||
+        (situacao === "fora-da-fila" && !!r.foraDaFila) ||
+        ((situacao === "ativos" || situacao === "arquivados") && (situacao === "arquivados") === r.arquivado)) &&
       (!f.analisados || r.ultimoRun),
   );
   const analisados = todos.filter((r) => Object.keys(r.notas).length);
   const ativos = todos.reduce((s, r) => s + r.ativos, 0);
+  const naFila = todos.filter((r) => !r.foraDaFila).length;
 
   return (
     <>
@@ -31,7 +35,7 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<F
       <header className="topo">
         <h1>Repos</h1>
         <span className="suave">
-          {analisados.length} de {todos.length} repos analisados · {ativos} achados ativos
+          {analisados.length} de {todos.length} repos analisados · {naFila} na fila do scan --all · {ativos} achados ativos
         </span>
       </header>
 
@@ -50,6 +54,8 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<F
         <select name="situacao" defaultValue={situacao}>
           <option value="ativos">não arquivados</option>
           <option value="arquivados">arquivados</option>
+          <option value="na-fila">na fila do scan --all</option>
+          <option value="fora-da-fila">fora da fila</option>
           <option value="todos">todos</option>
         </select>
         <label>
@@ -79,6 +85,11 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<F
                 <td>
                   <Link href={`/repo/${r.nome}`}>{r.nome}</Link> {r.privado && <span className="chip">privado</span>}
                   {r.arquivado && <span className="chip">arquivado</span>}
+                  {r.foraDaFila && !r.arquivado && (
+                    <span className="chip" title={r.foraDaFila}>
+                      fora da fila
+                    </span>
+                  )}
                   {r.rodando && <span className="chip info">analisando…</span>}
                   {r.headMudou && <span className="chip alerta">HEAD mudou</span>}
                 </td>

@@ -1,5 +1,5 @@
-import { and, desc, eq } from "drizzle-orm";
-import { type Db, sincronizarRepos, tabelas } from "@mwdx/db";
+import { desc } from "drizzle-orm";
+import { type Db, motivoFora, sincronizarRepos, tabelas } from "@mwdx/db";
 import { listarRepos } from "./github.ts";
 import { type ResultadoScan, scan } from "./scan.ts";
 
@@ -18,19 +18,26 @@ export type ResultadoLote = {
   interrompido: string | null;
 };
 
-// Fila de `scan --all`: repos não vazios, não arquivados e que não são fork,
-// dos mais recentes para os mais antigos. É retomável porque `scan` pula quem
-// já foi analisado no HEAD atual.
-export function filaLote(db: Db): string[] {
-  const { repos } = tabelas;
+// Fila de `scan --all`: repos que passam em `motivoFora` (regras automáticas ou
+// inclusão manual), dos mais recentes para os mais antigos. É retomável porque
+// `scan` pula quem já foi analisado no HEAD atual.
+function classificar(db: Db) {
   return db
-    .select({ nome: repos.nome, github: repos.github_json })
-    .from(repos)
-    .where(and(eq(repos.vazio, false), eq(repos.arquivado, false)))
-    .orderBy(desc(repos.pushed_at))
+    .select()
+    .from(tabelas.repos)
+    .orderBy(desc(tabelas.repos.pushed_at))
     .all()
-    .filter((r) => !(r.github as { isFork?: boolean }).isFork)
+    .map((r) => ({ nome: r.nome, motivo: motivoFora(r) }));
+}
+
+export function filaLote(db: Db): string[] {
+  return classificar(db)
+    .filter((r) => !r.motivo)
     .map((r) => r.nome);
+}
+
+export function foraDaFila(db: Db): { nome: string; motivo: string }[] {
+  return classificar(db).filter((r): r is { nome: string; motivo: string } => !!r.motivo);
 }
 
 export async function scanLote(db: Db, opts: OpcoesLote = {}): Promise<ResultadoLote> {

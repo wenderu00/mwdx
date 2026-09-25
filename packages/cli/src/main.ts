@@ -2,17 +2,20 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { StatusAchado } from "@mwdx/schema";
 import { existsSync } from "node:fs";
-import { REPO_TRANSVERSAL, abrirDb, iniciarRun, mudarStatus, obterRun, sincronizarRepos, finalizarRun } from "@mwdx/db";
+import { REPO_TRANSVERSAL, abrirDb, definirSelecao, iniciarRun, mudarStatus, obterRun, sincronizarRepos, finalizarRun } from "@mwdx/db";
 import { mwdxHome } from "./caminhos.ts";
 import { listarRepos } from "./github.ts";
 import { estrategia } from "./estrategia.ts";
 import { ingerirRunDir, ingerirTransversal } from "./ingest.ts";
-import { filaLote, scanLote } from "./lote.ts";
+import { filaLote, foraDaFila, scanLote } from "./lote.ts";
 import { prepararRunDir } from "./run-dir.ts";
 import { scan } from "./scan.ts";
 
 const USO = `uso:
   mwdx repos sync                          atualiza a lista de repos a partir do GitHub
+  mwdx repos excluir <repo> --motivo m     tira o repo da fila do scan --all
+  mwdx repos incluir <repo>                põe o repo na fila mesmo que as regras o tirem
+  mwdx repos auto <repo>                   volta o repo para as regras automáticas
   mwdx scan <repo> [--force]               analisa um repo (pula se o HEAD não mudou)
   mwdx scan --all [--concorrencia 2] [--limite n] [--listar]
                                            analisa todos os repos ativos, dos mais recentes aos mais antigos
@@ -32,9 +35,17 @@ try {
 async function executar() {
   switch (comando) {
     case "repos": {
-      if (resto[0] !== "sync") sair(USO);
-      const n = sincronizarRepos(abrirDb(), await listarRepos());
-      console.log(`${n} repos sincronizados`);
+      const { positionals, values } = parseArgs({ args: resto, allowPositionals: true, options: { motivo: { type: "string" } } });
+      const [acao, repo] = positionals;
+      if (acao === "sync") {
+        const n = sincronizarRepos(abrirDb(), await listarRepos());
+        console.log(`${n} repos sincronizados`);
+        return;
+      }
+      const selecao = { excluir: "excluir", incluir: "incluir", auto: null } as const;
+      if (!acao || !(acao in selecao) || !repo) sair(USO);
+      definirSelecao(abrirDb(), repo, selecao[acao as keyof typeof selecao], values.motivo);
+      console.log(`${repo} → ${acao}`);
       return;
     }
     case "scan": {
@@ -124,8 +135,14 @@ async function scanTodos(values: { concorrencia?: string; limite?: string; lista
   if (values.listar) {
     sincronizarRepos(db, await listarRepos());
     const fila = filaLote(db);
+    const fora = foraDaFila(db);
     fila.forEach((r, i) => console.log(`${String(i + 1).padStart(3)}. ${r}`));
-    console.log(`${fila.length} repos na fila (sem vazios, arquivados e forks); os já analisados no HEAD atual são pulados`);
+    console.log(`\nfora da fila:`);
+    fora.forEach((r) => console.log(`     ${r.nome} — ${r.motivo}`));
+    console.log(
+      `\n${fila.length} repos na fila, ${fora.length} fora (regras em packages/db/src/filtro.ts; ajuste com mwdx repos excluir/incluir/auto); ` +
+        `os já analisados no HEAD atual são pulados`,
+    );
     return;
   }
   const inteiro = (v: string | undefined, nome: string) => {

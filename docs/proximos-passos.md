@@ -86,11 +86,21 @@ inexistente, disparo e troca de status pelo dashboard, e `scan --all --listar`
 com o GitHub real. **Não verificado com o claude real**: o estrategista seguindo o
 novo formato (reconciliação) e um lote real.
 
+## Filtro da fila (concluído)
+
+`scan --all` só analisa quem passa em `motivoFora` (`packages/db/src/filtro.ts`).
+Ficam de fora vazios, arquivados, forks, repos sem linguagem (docs/notas), repos
+com menos de 10 KB e repos sem push há mais de 3 anos. A escolha manual em
+`repos.selecao` vale mais que as regras e sobrevive ao sync. Ela pode ser feita por
+`mwdx repos excluir <repo> --motivo m`, `repos incluir <repo>` e `repos auto <repo>`,
+ou na página do repo no dashboard (a home tem o chip "fora da fila" e um filtro).
+`scan <repo>` avulso ignora o filtro. Com o GitHub real, a fila caiu de 57 para 35.
+
 ## Primeiro uso real
 
 1. `node packages/cli/bin/mwdx.js repos sync` (o `~/.mwdx` real ainda está vazio).
 2. `scan --all --limite 5` para medir custo e qualidade nos repos mais ativos; depois o resto
-   (57 repos × US$ 2–4 ≈ US$ 170 equivalentes).
+   (35 repos na fila × US$ 2–4 ≈ US$ 100 equivalentes; revisar antes com `scan --all --listar`).
 3. `mwdx estrategia` e revisar `/portfolio`.
 
 ## Pendências e observações

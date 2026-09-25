@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
-import { STATUS_ATIVOS, detalheRepo } from "@mwdx/db";
+import { STATUS_ATIVOS, detalheRepo, motivoFora } from "@mwdx/db";
 import { CartaoAchado } from "../../../components/CartaoAchado.tsx";
 import { DIMENSOES, data, dinheiro } from "../../../components/formato.ts";
 import { Disparar } from "../../../components/Disparar.tsx";
+import { MudarSelecao } from "../../../components/MudarSelecao.tsx";
 import { Nota } from "../../../components/Nota.tsx";
 import { Sparkline } from "../../../components/Sparkline.tsx";
 import { db } from "../../../lib/db.ts";
@@ -37,6 +38,7 @@ export default async function Repo({ params }: { params: Promise<{ nome: string 
         <Disparar acao={reanalisarAcao.bind(null, repo.nome)} rodando={rodando} rotulo="reanalisar" />
       </header>
       {repo.descricao && <p className="suave">{repo.descricao}</p>}
+      <MudarSelecao repo={repo.nome} selecao={repo.selecao} regra={motivoFora({ ...repo, selecao: null })} />
 
       <div className="dimensoes">
         {DIMENSOES.map((dim) => {

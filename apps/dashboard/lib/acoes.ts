@@ -4,7 +4,7 @@ import { mkdirSync, openSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
-import { mudarStatus } from "@mwdx/db";
+import { definirSelecao, mudarStatus } from "@mwdx/db";
 import type { StatusAchado } from "@mwdx/schema";
 import { db } from "./db.ts";
 import { RAIZ } from "./raiz.ts";
@@ -18,6 +18,22 @@ export async function mudarStatusAcao(_: Resultado, form: FormData): Promise<Res
     return { erro: (e as Error).message };
   }
   // o mesmo achado aparece no repo, em quick-wins e no portfólio
+  revalidatePath("/", "layout");
+  return { erro: null };
+}
+
+export async function definirSelecaoAcao(_: Resultado, form: FormData): Promise<Resultado> {
+  const selecao = String(form.get("selecao"));
+  try {
+    definirSelecao(
+      db(),
+      String(form.get("repo")),
+      selecao === "incluir" || selecao === "excluir" ? selecao : null,
+      String(form.get("motivo") ?? ""),
+    );
+  } catch (e) {
+    return { erro: (e as Error).message };
+  }
   revalidatePath("/", "layout");
   return { erro: null };
 }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { abrirDb, type Db } from "@mwdx/db";
+import { abrirDb, type Db, definirSelecao } from "@mwdx/db";
 
 const repos = [
   { name: "novo", pushedAt: "2026-09-01T00:00:00Z" },
@@ -8,13 +8,17 @@ const repos = [
   { name: "vazio", pushedAt: "2026-09-02T00:00:00Z", isEmpty: true },
   { name: "arquivado", pushedAt: "2026-09-03T00:00:00Z", isArchived: true },
   { name: "fork", pushedAt: "2026-09-04T00:00:00Z", isFork: true },
+  { name: "notas", pushedAt: "2026-09-05T00:00:00Z", primaryLanguage: null },
+  { name: "stub", pushedAt: "2026-09-06T00:00:00Z", diskUsage: 2 },
+  { name: "bootcamp", pushedAt: "2021-12-27T00:00:00Z" },
 ].map((r) => ({
   isPrivate: false,
   isArchived: false,
   isEmpty: false,
   isFork: false,
   description: null,
-  primaryLanguage: null,
+  primaryLanguage: { name: "TypeScript" },
+  diskUsage: 100,
   defaultBranchRef: { name: "main" },
   ...r,
 }));
@@ -35,7 +39,7 @@ vi.mock("../src/scan.ts", () => ({
   },
 }));
 
-const { filaLote, scanLote } = await import("../src/lote.ts");
+const { filaLote, foraDaFila, scanLote } = await import("../src/lote.ts");
 
 let db: Db;
 beforeEach(() => {
@@ -45,9 +49,18 @@ beforeEach(() => {
 });
 
 describe("scan --all", () => {
-  it("fila: sem vazios, arquivados e forks, do push mais recente ao mais antigo", async () => {
+  it("fila: sem vazios, arquivados, forks e irrelevantes, do push mais recente ao mais antigo", async () => {
     await scanLote(db, { concorrencia: 1 });
     expect(filaLote(db)).toEqual(["novo", "medio", "velho"]);
+    expect(foraDaFila(db).map((r) => r.nome).sort()).toEqual(["arquivado", "bootcamp", "fork", "notas", "stub", "vazio"]);
+  });
+
+  it("a escolha manual vale mais que as regras", async () => {
+    await scanLote(db, { concorrencia: 1 });
+    definirSelecao(db, "bootcamp", "incluir");
+    definirSelecao(db, "novo", "excluir", "tutorial");
+    expect(filaLote(db)).toEqual(["medio", "velho", "bootcamp"]);
+    expect(foraDaFila(db).find((r) => r.nome === "novo")?.motivo).toBe("excluído manualmente: tutorial");
   });
 
   it("analisa tudo com concorrência, soma o custo e conta os pulados", async () => {

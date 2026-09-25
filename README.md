@@ -54,7 +54,8 @@ Uso (dados em `~/.mwdx`, ou em `MWDX_HOME`):
 ```bash
 node packages/cli/bin/mwdx.js repos sync
 node packages/cli/bin/mwdx.js scan tilapia            # pula se o HEAD não mudou; --force para reanalisar
-node packages/cli/bin/mwdx.js scan --all --listar     # mostra a fila (sem vazios, arquivados e forks)
+node packages/cli/bin/mwdx.js scan --all --listar     # mostra a fila e quem ficou de fora, com o motivo
+node packages/cli/bin/mwdx.js repos excluir telgram-bot --motivo "..."  # tira da fila (também: incluir, auto)
 node packages/cli/bin/mwdx.js scan --all --limite 10  # concorrência 2; retomável; para no limite da assinatura
 node packages/cli/bin/mwdx.js estrategia              # visão transversal (precisa de ≥ 2 repos analisados)
 node packages/cli/bin/mwdx.js achado tilapia-higiene-2 ignorado --motivo "..."

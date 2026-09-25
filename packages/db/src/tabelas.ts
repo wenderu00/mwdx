@@ -12,6 +12,10 @@ export const repos = sqliteTable("repos", {
   // resposta de `gh repo list` normalizada; vai para contexto.json → github
   github_json: text({ mode: "json" }).notNull(),
   sincronizado_em: text().notNull(),
+  // escolha manual sobre a fila do `scan --all`; null = segue as regras de filtro.ts.
+  // O sync não toca nesses campos.
+  selecao: text({ enum: ["incluir", "excluir"] }),
+  selecao_motivo: text(),
 });
 
 export const runs = sqliteTable(

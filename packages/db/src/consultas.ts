@@ -1,6 +1,7 @@
 import { and, desc, eq, gt, inArray, lte, ne } from "drizzle-orm";
 import type { Dimensao, Evidencia, Execucao, StatusAchado } from "@mwdx/schema";
 import { type Db, REPO_TRANSVERSAL, STATUS_ATIVOS } from "./index.ts";
+import { motivoFora } from "./filtro.ts";
 import * as t from "./tabelas.ts";
 
 // Leituras do dashboard. O volume é pequeno (dezenas de repos, centenas de runs),
@@ -25,6 +26,8 @@ export type ItemPainel = {
   ativos: number;
   rodando: boolean;
   headMudou: boolean;
+  selecao: "incluir" | "excluir" | null;
+  foraDaFila: string | null; // motivo de ficar fora do `scan --all`
 };
 
 const COM_RELATORIO = new Set<LinhaRun["status"]>(["ok", "parcial"]);
@@ -74,6 +77,8 @@ export function painel(db: Db): ItemPainel[] {
       ativos: ativos.get(repo.nome) ?? 0,
       rodando: runs.some((r) => r.status === "rodando"),
       headMudou: !!(atual && repo.pushed_at && repo.pushed_at > atual.iniciado),
+      selecao: repo.selecao,
+      foraDaFila: motivoFora(repo),
     };
   });
 }

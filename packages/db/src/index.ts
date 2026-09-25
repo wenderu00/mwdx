@@ -83,6 +83,18 @@ export function obterRepo(db: Db, nome: string) {
   return db.select().from(t.repos).where(eq(t.repos.nome, nome)).get();
 }
 
+// null volta o repo para as regras automáticas de filtro.ts.
+export function definirSelecao(db: Db, nome: string, selecao: "incluir" | "excluir" | null, motivo?: string) {
+  if (selecao === "excluir" && !motivo?.trim()) throw new Error("excluir exige motivo");
+  if (!obterRepo(db, nome)) throw new Error(`repo inexistente: ${nome} (rode mwdx repos sync)`);
+  db.update(t.repos)
+    .set({ selecao, selecao_motivo: selecao ? motivo?.trim() || null : null })
+    .where(eq(t.repos.nome, nome))
+    .run();
+}
+
+export * from "./filtro.ts";
+
 // ---------- runs ----------
 
 export function iniciarRun(db: Db, run: { id: string; repo: string; head_sha: string | null; run_dir: string }) {
